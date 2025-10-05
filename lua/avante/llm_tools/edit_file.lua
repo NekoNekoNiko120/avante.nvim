@@ -132,7 +132,7 @@ M.func = function(input, opts)
     headers = headers,
     body = vim.json.encode(body),
     timeout = 120000, -- 120 seconds
-    callback = function(response)
+    callback = vim.schedule_wrap(function(response)
       
       if response.status >= 400 then
 
@@ -184,32 +184,29 @@ M.func = function(input, opts)
         return
       end
       
-      -- Use vim.schedule to avoid fast event context issues
-      vim.schedule(function()
-        -- Split the merged code into lines
-        local new_lines = vim.split(merged_code, "\n")
-        
-        -- Replace the entire buffer content
-        local success, set_lines_err = pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
-        if not success then
-          on_complete(false, "Failed to update buffer: " .. (set_lines_err or "unknown error"))
-          return
-        end
-        
-        -- Mark the buffer as modified and save it
-        local save_success, save_err = pcall(function()
-          vim.api.nvim_buf_call(bufnr, function() 
-            vim.cmd("noautocmd write!") 
-          end)
+      -- Split the merged code into lines
+      local new_lines = vim.split(merged_code, "\n")
+      
+      -- Replace the entire buffer content
+      local success, set_lines_err = pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
+      if not success then
+        on_complete(false, "Failed to update buffer: " .. (set_lines_err or "unknown error"))
+        return
+      end
+      
+      -- Mark the buffer as modified and save it
+      local save_success, save_err = pcall(function()
+        vim.api.nvim_buf_call(bufnr, function() 
+          vim.cmd("noautocmd write!") 
         end)
-        
-        if not save_success then
-          on_complete(false, "Failed to save file: " .. (save_err or "unknown error"))
-          return
-        end
-        
-        on_complete(true, nil)
       end)
+      
+      if not save_success then
+        on_complete(false, "Failed to save file: " .. (save_err or "unknown error"))
+        return
+      end
+      
+      on_complete(true, nil)
     end
   })
 end
