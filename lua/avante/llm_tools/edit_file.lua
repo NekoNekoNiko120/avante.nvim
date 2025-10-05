@@ -213,15 +213,51 @@ M.func = function(input, opts)
         return
       end
 
-      local str_replace = require("avante.llm_tools.str_replace")
-      local new_input = {
-        path = input.path,
-        old_str = original_code,
-        new_str = jsn.choices[1].message.content,
-      }
+      -- Morph API returns the complete merged code, so we write it directly to the file
+      local merged_code = jsn.choices[1].message.content
       
-      -- str_replace.func is async and will call on_complete itself
-      str_replace.func(new_input, opts)
+      if not merged_code or merged_code == "" then
+        on_complete(false, "Morph API returned empty content")
+        return
+      end
+      
+      local Helpers = require("avante.llm_tools.helpers")
+      
+      local abs_path = Helpers.get_abs_path(input.path)
+      if not Helpers.has_permission_to_access(abs_path) then 
+        on_complete(false, "No permission to access path: " .. abs_path)
+        return
+      end
+      
+      local bufnr, err = Helpers.get_bufnr(abs_path)
+      if err then 
+        on_complete(false, err)
+        return
+      end
+      
+      -- Split the merged code into lines
+      local new_lines = vim.split(merged_code, "\n")
+      
+      -- Replace the entire buffer content
+      local success, set_lines_err = pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
+      if not success then
+        on_complete(false, "Failed to update buffer: " .. (set_lines_err or "unknown error"))
+        return
+      end
+      
+      -- Mark the buffer as modified and save it
+      local save_success, save_err = pcall(function()
+        vim.api.nvim_buf_call(bufnr, function() 
+          vim.cmd("noautocmd write!") 
+        end)
+      end)
+      
+      if not save_success then
+        on_complete(false, "Failed to save file: " .. (save_err or "unknown error"))
+        return
+      end
+      
+      on_complete(true, nil)
     end)
   )
 end
