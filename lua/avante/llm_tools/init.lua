@@ -1256,6 +1256,62 @@ M.run_python = M.python
 ---@field set_tool_use_store? fun(tool_id: string, key: string, value: any): nil
 ---@field on_complete? fun(result: string | nil, error: string | nil): nil
 
+---@param input_json table
+---@param tool_name string
+---@return string | nil error_message
+local function validate_tool_parameters(input_json, tool_name)
+  if not input_json then
+    return "Input parameters are required for " .. tool_name
+  end
+  
+  if type(input_json) ~= "table" then
+    return "Input must be a table/object for " .. tool_name
+  end
+  
+  -- Special validation for MCP tools
+  if tool_name == "use_mcp_tool" then
+    if not input_json.command or input_json.command == "" then
+      return "command field is required and cannot be empty. Available commands may include: read_file, write_file, list_directory, etc."
+    end
+    
+    -- Normalize command name (handle case variations)
+    local command = string.lower(tostring(input_json.command))
+    
+    -- Commands that require path parameter
+    local commands_requiring_path = {
+      "read_file", "write_file", "edit_file", "create_file", "delete_file", 
+      "list_directory", "get_file_info", "move_file", "copy_file", "stat",
+      "readfile", "writefile", "editfile", "createfile", "deletefile",
+      "listdirectory", "getfileinfo", "movefile", "copyfile"
+    }
+    if vim.tbl_contains(commands_requiring_path, command) then
+      if not input_json.path or input_json.path == "" then
+        return "Missing required parameter: path (required for command '" .. input_json.command .. "'). Please provide a valid file or directory path."
+      end
+      
+      -- Validate path format
+      if type(input_json.path) ~= "string" then
+        return "path parameter must be a string (got " .. type(input_json.path) .. ")"
+      end
+    end
+    
+    -- Commands that require content parameter
+    local commands_requiring_content = {"write_file", "edit_file", "create_file", "writefile", "editfile", "createfile"}
+    if vim.tbl_contains(commands_requiring_content, command) then
+      if not input_json.content and not input_json.text and not input_json.data and not input_json.body then
+        return "Missing required parameter: content/text/data/body (required for command '" .. input_json.command .. "'). Please provide the content to write."
+      end
+    end
+    
+    -- Validate server_name if provided
+    if input_json.server_name and type(input_json.server_name) ~= "string" then
+      return "server_name parameter must be a string if provided"
+    end
+  end
+  
+  return nil -- No validation errors
+end
+
 ---@param tools AvanteLLMTool[]
 ---@param tool_use AvanteLLMToolUse
 ---@return string | nil result
@@ -1281,7 +1337,14 @@ function M.process_tool_use(tools, tool_use, opts)
   else
     ---@type AvanteLLMTool?
     local tool = vim.iter(tools):find(function(tool) return tool.name == tool_use.name end) ---@param tool AvanteLLMTool
-    if tool == nil then return nil, "This tool is not provided: " .. vim.inspect(tool_use.name) end
+    if tool == nil then 
+      -- Provide more helpful error message for MCP tools
+      if tool_use.name == "use_mcp_tool" then
+        return nil, "MCP tool 'use_mcp_tool' is not available. Please ensure mcphub.nvim is properly installed and configured."
+      else
+        return nil, "This tool is not provided: " .. vim.inspect(tool_use.name)
+      end
+    end
     func = tool.func or M[tool.name]
   end
   local input_json = tool_use.input
@@ -1338,6 +1401,24 @@ function M.process_tool_use(tools, tool_use, opts)
       result_str = vim.json.encode(result)
     end
     return result_str, err
+  end
+
+  -- Enhanced parameter validation for all tools
+  local validation_error = validate_tool_parameters(input_json, tool_use.name)
+  if validation_error then
+    -- Log validation error for debugging
+    if on_log then 
+      on_log(tool_use.id, tool_use.name, "Parameter validation failed: " .. validation_error, "failed") 
+    end
+    return nil, validation_error
+  end
+  
+  -- Log tool parameters for MCP tools (for debugging)
+  if tool_use.name == "use_mcp_tool" and on_log then
+    local debug_info = "MCP tool called with command: " .. (input_json.command or "none")
+    if input_json.path then debug_info = debug_info .. ", path: " .. input_json.path end
+    if input_json.server_name then debug_info = debug_info .. ", server: " .. input_json.server_name end
+    on_log(tool_use.id, tool_use.name, debug_info, "running")
   end
 
   local result, err = func(input_json, {

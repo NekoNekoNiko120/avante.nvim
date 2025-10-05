@@ -54,9 +54,6 @@ M.returns = {
 
 ---@type AvanteLLMToolFunc<{ path: string, instructions: string, code_edit: string }>
 M.func = function(input, opts)
-  -- Add debug logging
-  print("DEBUG: edit_file.func called with path:", input.path)
-  
   if opts.streaming then return false, "streaming not supported" end
   if not input.path then return false, "path not provided" end
   if not input.instructions then input.instructions = "" end
@@ -64,17 +61,9 @@ M.func = function(input, opts)
   local on_complete = opts.on_complete
   if not on_complete then return false, "on_complete not provided" end
   
-  print("DEBUG: Checking morph provider...")
   local provider = Providers["morph"]
-  if not provider then 
-    print("DEBUG: morph provider not found")
-    return false, "morph provider not found" 
-  end
-  if not provider.is_env_set() then 
-    print("DEBUG: morph provider not set")
-    return false, "morph provider not set" 
-  end
-  print("DEBUG: morph provider OK")
+  if not provider then return false, "morph provider not found" end
+  if not provider.is_env_set() then return false, "morph provider not set" end
 
   --- if input.path is a directory, return false
   if vim.fn.isdirectory(input.path) == 1 then return false, "path is a directory" end
@@ -124,14 +113,12 @@ M.func = function(input, opts)
   end
 
   local url = Utils.url_join(provider_conf.endpoint, "/chat/completions")
-  print("DEBUG: Sending request to:", url)
   
   curl.post(url, {
     headers = headers,
     body = vim.json.encode(body),
     timeout = 120000, -- 120 seconds
     callback = function(response)
-      print("DEBUG: Received response, status:", response.status)
       
       if response.status >= 400 then
 
@@ -177,7 +164,6 @@ M.func = function(input, opts)
 
       -- Morph API returns the complete merged code, so we write it directly to the file
       local merged_code = jsn.choices[1].message.content
-      print("DEBUG: Received merged code, length:", #merged_code)
       
       if not merged_code or merged_code == "" then
         on_complete(false, "Morph API returned empty content")
@@ -220,7 +206,6 @@ M.func = function(input, opts)
         return
       end
       
-      print("DEBUG: File updated successfully, calling on_complete")
       on_complete(true, nil)
     end
   })

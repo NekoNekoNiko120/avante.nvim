@@ -797,6 +797,7 @@ function M.get_last_used_model(known_providers)
       Utils.warn("Last used model file is empty: " .. storage_path)
       -- Remove to not have repeated warnings
       os.remove(storage_path)
+      return
     end
 
     local success, data = pcall(vim.json.decode, content)
@@ -816,12 +817,28 @@ function M.get_last_used_model(known_providers)
         os.remove(storage_path)
         return
       end
-      if data.provider_model and provider.model and provider.model ~= data.provider_model then
-        return provider.model, data.last_provider
-      end
-    end
 
-    return data.last_model, data.last_provider
+      if data.last_model then
+        -- Relaxed validation: accept the saved model if any of the following is true:
+        -- 1) It equals the provider's current model
+        -- 2) It appears in provider.model_names
+        -- 3) It matches the provider_model recorded at save time
+        local is_same_as_provider_model = provider.model and data.last_model == provider.model
+        local is_in_model_names = vim.tbl_contains(provider.model_names or {}, data.last_model)
+        local is_same_as_saved_provider_model = data.provider_model and data.provider_model == data.last_model
+
+        if is_same_as_provider_model or is_in_model_names or is_same_as_saved_provider_model then
+          return data.last_model, data.last_provider
+        else
+          Utils.warn(
+            "Model " .. data.last_model .. " is no longer valid for provider " .. data.last_provider .. ", using default model"
+          )
+        end
+      end
+
+      -- Return the provider's default model if the last_model is invalid
+      return provider.model, data.last_provider
+    end
   end
 end
 
