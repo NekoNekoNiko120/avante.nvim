@@ -512,7 +512,7 @@ M._defaults = {
     ---@type boolean | string[] -- true: auto-approve all tools, false: normal prompts, string[]: auto-approve specific tools by name
     auto_approve_tool_permissions = true, -- Default: show permission prompts for all tools
     auto_check_diagnostics = true,
-    enable_fastapply = false,
+    enable_fastapply = true,
     include_generated_by_commit_line = false, -- Controls if 'Generated-by: <provider/model>' line is added to git commit message
   },
   prompt_logger = { -- logs prompts to disk (timestamped, for replay/debugging)

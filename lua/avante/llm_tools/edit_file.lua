@@ -63,19 +63,13 @@ M.func = vim.schedule_wrap(function(input, opts)
   if not provider then return false, "morph provider not found" end
   if not provider.is_env_set() then return false, "morph provider not set" end
 
-  if not input.path then return false, "path not provided" end
-
   --- if input.path is a directory, return false
   if vim.fn.isdirectory(input.path) == 1 then return false, "path is a directory" end
 
-  local ok, lines = pcall(Utils.read_file_from_buf_or_disk, input.path)
-  if not ok then
-    local f = io.open(input.path, "r")
-    if f then
-      local original_code = f:read("*all")
-      f:close()
-      lines = vim.split(original_code, "\n")
-    end
+  local lines, read_error = Utils.read_file_from_buf_or_disk(input.path)
+  if read_error then
+    on_complete(false, "Failed to read file: " .. input.path .. " - " .. read_error)
+    return
   end
 
   if lines and #lines > 0 then
@@ -128,6 +122,10 @@ M.func = vim.schedule_wrap(function(input, opts)
   -- Add authorization header if available
   if Providers.env.require_api_key(provider_conf) then
     local api_key = provider.parse_api_key()
+    if not api_key or api_key == "" then
+      on_complete(false, "API key not found or empty")
+      return
+    end
     table.insert(curl_cmd, 4, "-H")
     table.insert(curl_cmd, 5, "Authorization: Bearer " .. api_key)
   end
@@ -221,7 +219,13 @@ M.func = vim.schedule_wrap(function(input, opts)
         old_str = original_code,
         new_str = jsn.choices[1].message.content,
       }
-      str_replace.func(new_input, opts)
+      
+      -- Call str_replace.func with proper error handling
+      local success, error_msg = str_replace.func(new_input, opts)
+      if not success and error_msg then
+        on_complete(false, "str_replace failed: " .. error_msg)
+        return
+      end
     end)
   )
 end)
