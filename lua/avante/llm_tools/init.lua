@@ -1404,6 +1404,15 @@ function M.process_tool_use(tools, tool_use, opts)
 
 
 
+  -- Debug: Log what's happening with MCP tools
+  if tool_use.name == "use_mcp_tool" then
+    vim.notify("=== MCP VALIDATION DEBUG ===", vim.log.levels.WARN)
+    vim.notify("input_json: " .. vim.inspect(input_json), vim.log.levels.WARN)
+    local validation_result = validate_tool_parameters(input_json, tool_use.name)
+    vim.notify("validation_result: " .. tostring(validation_result), vim.log.levels.WARN)
+    vim.notify("=== END MCP VALIDATION DEBUG ===", vim.log.levels.WARN)
+  end
+
   -- Enhanced parameter validation for all tools
   local validation_error = validate_tool_parameters(input_json, tool_use.name)
   if validation_error then
