@@ -1270,29 +1270,18 @@ local function validate_tool_parameters(input_json, tool_name)
   
   -- Special validation for MCP tools (based on mcphub.nvim implementation)
   if tool_name == "use_mcp_tool" then
-    
     -- Validate mcphub-specific parameters (correct structure)
     if not input_json.server_name or input_json.server_name == "" then
-      return "server_name field is required for use_mcp_tool. Please specify which MCP server to use.\n\nCorrect format:\n{\n  server_name = \"your_server\",\n  tool_name = \"tool_name\",\n  tool_input = { ... }\n}\n\nReceived input: " .. vim.inspect(input_json)
+      return "server_name field is required for use_mcp_tool. Please specify which MCP server to use.\n\nReceived input: " .. vim.inspect(input_json)
     end
     
     if not input_json.tool_name or input_json.tool_name == "" then
-      return "tool_name field is required for use_mcp_tool. Please specify which tool to call on the MCP server.\n\nCorrect format:\n{\n  server_name = \"" .. input_json.server_name .. "\",\n  tool_name = \"tool_name\",\n  tool_input = { ... }\n}\n\nReceived input: " .. vim.inspect(input_json)
+      return "tool_name field is required for use_mcp_tool. Please specify which tool to call on the MCP server.\n\nReceived input: " .. vim.inspect(input_json)
     end
     
     -- tool_input should be a table (can be empty)
     if input_json.tool_input and type(input_json.tool_input) ~= "table" then
-      return "tool_input must be a table/object for use_mcp_tool.\n\nCorrect format:\n{\n  server_name = \"" .. input_json.server_name .. "\",\n  tool_name = \"" .. input_json.tool_name .. "\",\n  tool_input = { key: \"value\" }\n}\n\nReceived input: " .. vim.inspect(input_json)
-    end
-    
-    -- If we have old-style parameters (command, path, etc.), show helpful error
-    if input_json.command then
-      local suggested_tool_input = {}
-      if input_json.path then suggested_tool_input.path = input_json.path end
-      if input_json.content then suggested_tool_input.content = input_json.content end
-      if input_json.text then suggested_tool_input.text = input_json.text end
-      
-      return "Invalid parameter structure for use_mcp_tool. Found 'command' field, but use_mcp_tool expects mcphub format.\n\nYou provided (old format):\n" .. vim.inspect(input_json) .. "\n\nCorrect format should be:\n{\n  server_name = \"filesystem\",  -- or your MCP server name\n  tool_name = \"" .. input_json.command .. "\",\n  tool_input = " .. vim.inspect(suggested_tool_input) .. "\n}"
+      return "tool_input must be a table/object for use_mcp_tool.\n\nReceived input: " .. vim.inspect(input_json)
     end
     
     -- Validate server_name and tool_name types
@@ -1303,6 +1292,9 @@ local function validate_tool_parameters(input_json, tool_name)
     if type(input_json.tool_name) ~= "string" then
       return "tool_name must be a string (got " .. type(input_json.tool_name) .. ")"
     end
+    
+    -- All validations passed - this is a valid mcphub format
+    return nil
   end
   
   return nil -- No validation errors
@@ -1399,19 +1391,7 @@ function M.process_tool_use(tools, tool_use, opts)
     return result_str, err
   end
 
-  -- Debug: Log what LLM actually passed for MCP tools
-  if tool_use.name == "use_mcp_tool" then
-    vim.notify("=== MCP TOOL DEBUG ===", vim.log.levels.WARN)
-    vim.notify("tool_use.name: " .. tostring(tool_use.name), vim.log.levels.WARN)
-    vim.notify("tool_use.input: " .. vim.inspect(input_json), vim.log.levels.WARN)
-    vim.notify("input_json type: " .. type(input_json), vim.log.levels.WARN)
-    if input_json then
-      for key, value in pairs(input_json) do
-        vim.notify("  " .. key .. " = " .. vim.inspect(value) .. " (type: " .. type(value) .. ")", vim.log.levels.WARN)
-      end
-    end
-    vim.notify("=== END MCP DEBUG ===", vim.log.levels.WARN)
-  end
+
 
   -- Enhanced parameter validation for all tools
   local validation_error = validate_tool_parameters(input_json, tool_use.name)
