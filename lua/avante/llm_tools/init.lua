@@ -1268,44 +1268,43 @@ local function validate_tool_parameters(input_json, tool_name)
     return "Input must be a table/object for " .. tool_name
   end
   
-  -- Special validation for MCP tools
+  -- Special validation for MCP tools (based on mcphub.nvim implementation)
   if tool_name == "use_mcp_tool" then
-    if not input_json.command or input_json.command == "" then
-      return "command field is required and cannot be empty. Available commands may include: read_file, write_file, list_directory, etc."
+    -- Debug: Log the actual input received
+    local debug_input = "MCP tool input: " .. vim.inspect(input_json)
+    vim.notify(debug_input, vim.log.levels.DEBUG)
+    
+    -- Validate mcphub-specific parameters (correct structure)
+    if not input_json.server_name or input_json.server_name == "" then
+      return "server_name field is required for use_mcp_tool. Please specify which MCP server to use.\n\nCorrect format:\n{\n  server_name = \"your_server\",\n  tool_name = \"tool_name\",\n  tool_input = { ... }\n}\n\nReceived input: " .. vim.inspect(input_json)
     end
     
-    -- Normalize command name (handle case variations)
-    local command = string.lower(tostring(input_json.command))
+    if not input_json.tool_name or input_json.tool_name == "" then
+      return "tool_name field is required for use_mcp_tool. Please specify which tool to call on the MCP server.\n\nCorrect format:\n{\n  server_name = \"" .. input_json.server_name .. "\",\n  tool_name = \"tool_name\",\n  tool_input = { ... }\n}\n\nReceived input: " .. vim.inspect(input_json)
+    end
     
-    -- Commands that require path parameter
-    local commands_requiring_path = {
-      "read_file", "write_file", "edit_file", "create_file", "delete_file", 
-      "list_directory", "get_file_info", "move_file", "copy_file", "stat",
-      "readfile", "writefile", "editfile", "createfile", "deletefile",
-      "listdirectory", "getfileinfo", "movefile", "copyfile"
-    }
-    if vim.tbl_contains(commands_requiring_path, command) then
-      if not input_json.path or input_json.path == "" then
-        return "Missing required parameter: path (required for command '" .. input_json.command .. "'). Please provide a valid file or directory path."
-      end
+    -- tool_input should be a table (can be empty)
+    if input_json.tool_input and type(input_json.tool_input) ~= "table" then
+      return "tool_input must be a table/object for use_mcp_tool.\n\nCorrect format:\n{\n  server_name = \"" .. input_json.server_name .. "\",\n  tool_name = \"" .. input_json.tool_name .. "\",\n  tool_input = { key: \"value\" }\n}\n\nReceived input: " .. vim.inspect(input_json)
+    end
+    
+    -- If we have old-style parameters (command, path, etc.), show helpful error
+    if input_json.command then
+      local suggested_tool_input = {}
+      if input_json.path then suggested_tool_input.path = input_json.path end
+      if input_json.content then suggested_tool_input.content = input_json.content end
+      if input_json.text then suggested_tool_input.text = input_json.text end
       
-      -- Validate path format
-      if type(input_json.path) ~= "string" then
-        return "path parameter must be a string (got " .. type(input_json.path) .. ")"
-      end
+      return "Invalid parameter structure for use_mcp_tool. Found 'command' field, but use_mcp_tool expects mcphub format.\n\nYou provided (old format):\n" .. vim.inspect(input_json) .. "\n\nCorrect format should be:\n{\n  server_name = \"filesystem\",  -- or your MCP server name\n  tool_name = \"" .. input_json.command .. "\",\n  tool_input = " .. vim.inspect(suggested_tool_input) .. "\n}"
     end
     
-    -- Commands that require content parameter
-    local commands_requiring_content = {"write_file", "edit_file", "create_file", "writefile", "editfile", "createfile"}
-    if vim.tbl_contains(commands_requiring_content, command) then
-      if not input_json.content and not input_json.text and not input_json.data and not input_json.body then
-        return "Missing required parameter: content/text/data/body (required for command '" .. input_json.command .. "'). Please provide the content to write."
-      end
+    -- Validate server_name and tool_name types
+    if type(input_json.server_name) ~= "string" then
+      return "server_name must be a string (got " .. type(input_json.server_name) .. ")"
     end
     
-    -- Validate server_name if provided
-    if input_json.server_name and type(input_json.server_name) ~= "string" then
-      return "server_name parameter must be a string if provided"
+    if type(input_json.tool_name) ~= "string" then
+      return "tool_name must be a string (got " .. type(input_json.tool_name) .. ")"
     end
   end
   
@@ -1401,6 +1400,63 @@ function M.process_tool_use(tools, tool_use, opts)
       result_str = vim.json.encode(result)
     end
     return result_str, err
+  end
+
+  -- Try to fix common MCP parameter issues and convert old format to mcphub format
+  if tool_use.name == "use_mcp_tool" and input_json then
+    -- Check if we have old-style parameters and try to convert them
+    if input_json.command and not input_json.tool_name then
+      -- This looks like old format, try to convert to mcphub format
+      local old_input = vim.deepcopy(input_json)
+      
+      -- Set default server_name if not provided
+      if not input_json.server_name then
+        input_json.server_name = "filesystem" -- Common default
+      end
+      
+      -- Move command to tool_name
+      input_json.tool_name = input_json.command
+      input_json.command = nil
+      
+      -- Create tool_input from remaining parameters
+      input_json.tool_input = {}
+      for key, value in pairs(old_input) do
+        if key ~= "command" and key ~= "server_name" and key ~= "tool_name" then
+          input_json.tool_input[key] = value
+          input_json[key] = nil
+        end
+      end
+      
+      if on_log then 
+        on_log(tool_use.id, tool_use.name, "Auto-converted old format to mcphub format: " .. vim.inspect(input_json), "running") 
+      end
+    end
+    
+    -- If we still don't have the required mcphub parameters, try to infer them
+    if not input_json.server_name and not input_json.tool_name then
+      -- Try to infer from available parameters
+      if input_json.path then
+        input_json.server_name = "filesystem"
+        if input_json.content or input_json.text or input_json.data then
+          input_json.tool_name = "write_file"
+        else
+          input_json.tool_name = "read_file"
+        end
+        
+        -- Move other parameters to tool_input
+        input_json.tool_input = {}
+        for key, value in pairs(input_json) do
+          if key ~= "server_name" and key ~= "tool_name" then
+            input_json.tool_input[key] = value
+            input_json[key] = nil
+          end
+        end
+        
+        if on_log then 
+          on_log(tool_use.id, tool_use.name, "Auto-inferred mcphub parameters: " .. vim.inspect(input_json), "running") 
+        end
+      end
+    end
   end
 
   -- Enhanced parameter validation for all tools
