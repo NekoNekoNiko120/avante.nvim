@@ -1293,6 +1293,17 @@ local function validate_tool_parameters(input_json, tool_name)
       return "tool_name must be a string (got " .. type(input_json.tool_name) .. ")"
     end
     
+    -- Basic tool-specific parameter validation
+    if input_json.tool_name == "write_file" then
+      if not input_json.tool_input or not input_json.tool_input.path then
+        return "write_file tool requires 'path' parameter in tool_input"
+      end
+    elseif input_json.tool_name == "read_file" then
+      if not input_json.tool_input or not input_json.tool_input.path then
+        return "read_file tool requires 'path' parameter in tool_input"
+      end
+    end
+    
     -- All validations passed - this is a valid mcphub format
     return nil
   end
@@ -1403,13 +1414,7 @@ function M.process_tool_use(tools, tool_use, opts)
     return nil, validation_error
   end
   
-  -- Log tool parameters for MCP tools (for debugging)
-  if tool_use.name == "use_mcp_tool" and on_log then
-    local debug_info = "MCP tool called with command: " .. (input_json.command or "none")
-    if input_json.path then debug_info = debug_info .. ", path: " .. input_json.path end
-    if input_json.server_name then debug_info = debug_info .. ", server: " .. input_json.server_name end
-    on_log(tool_use.id, tool_use.name, debug_info, "running")
-  end
+
 
   local result, err = func(input_json, {
     session_ctx = opts.session_ctx or {},
