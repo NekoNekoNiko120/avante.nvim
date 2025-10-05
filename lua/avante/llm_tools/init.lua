@@ -1270,9 +1270,6 @@ local function validate_tool_parameters(input_json, tool_name)
   
   -- Special validation for MCP tools (based on mcphub.nvim implementation)
   if tool_name == "use_mcp_tool" then
-    -- Debug: Log the actual input received
-    local debug_input = "MCP tool input: " .. vim.inspect(input_json)
-    vim.notify(debug_input, vim.log.levels.DEBUG)
     
     -- Validate mcphub-specific parameters (correct structure)
     if not input_json.server_name or input_json.server_name == "" then
@@ -1402,61 +1399,18 @@ function M.process_tool_use(tools, tool_use, opts)
     return result_str, err
   end
 
-  -- Try to fix common MCP parameter issues and convert old format to mcphub format
-  if tool_use.name == "use_mcp_tool" and input_json then
-    -- Check if we have old-style parameters and try to convert them
-    if input_json.command and not input_json.tool_name then
-      -- This looks like old format, try to convert to mcphub format
-      local old_input = vim.deepcopy(input_json)
-      
-      -- Set default server_name if not provided
-      if not input_json.server_name then
-        input_json.server_name = "filesystem" -- Common default
-      end
-      
-      -- Move command to tool_name
-      input_json.tool_name = input_json.command
-      input_json.command = nil
-      
-      -- Create tool_input from remaining parameters
-      input_json.tool_input = {}
-      for key, value in pairs(old_input) do
-        if key ~= "command" and key ~= "server_name" and key ~= "tool_name" then
-          input_json.tool_input[key] = value
-          input_json[key] = nil
-        end
-      end
-      
-      if on_log then 
-        on_log(tool_use.id, tool_use.name, "Auto-converted old format to mcphub format: " .. vim.inspect(input_json), "running") 
+  -- Debug: Log what LLM actually passed for MCP tools
+  if tool_use.name == "use_mcp_tool" then
+    vim.notify("=== MCP TOOL DEBUG ===", vim.log.levels.WARN)
+    vim.notify("tool_use.name: " .. tostring(tool_use.name), vim.log.levels.WARN)
+    vim.notify("tool_use.input: " .. vim.inspect(input_json), vim.log.levels.WARN)
+    vim.notify("input_json type: " .. type(input_json), vim.log.levels.WARN)
+    if input_json then
+      for key, value in pairs(input_json) do
+        vim.notify("  " .. key .. " = " .. vim.inspect(value) .. " (type: " .. type(value) .. ")", vim.log.levels.WARN)
       end
     end
-    
-    -- If we still don't have the required mcphub parameters, try to infer them
-    if not input_json.server_name and not input_json.tool_name then
-      -- Try to infer from available parameters
-      if input_json.path then
-        input_json.server_name = "filesystem"
-        if input_json.content or input_json.text or input_json.data then
-          input_json.tool_name = "write_file"
-        else
-          input_json.tool_name = "read_file"
-        end
-        
-        -- Move other parameters to tool_input
-        input_json.tool_input = {}
-        for key, value in pairs(input_json) do
-          if key ~= "server_name" and key ~= "tool_name" then
-            input_json.tool_input[key] = value
-            input_json[key] = nil
-          end
-        end
-        
-        if on_log then 
-          on_log(tool_use.id, tool_use.name, "Auto-inferred mcphub parameters: " .. vim.inspect(input_json), "running") 
-        end
-      end
-    end
+    vim.notify("=== END MCP DEBUG ===", vim.log.levels.WARN)
   end
 
   -- Enhanced parameter validation for all tools
