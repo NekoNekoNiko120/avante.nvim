@@ -207,7 +207,7 @@ M.func = function(input, opts)
       end
       
       on_complete(true, nil)
-    end
+    end)
   })
 end
 
