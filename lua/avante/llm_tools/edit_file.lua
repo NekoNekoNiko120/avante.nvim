@@ -68,6 +68,20 @@ M.func = function(input, opts)
   --- if input.path is a directory, return false
   if vim.fn.isdirectory(input.path) == 1 then return false, "path is a directory" end
 
+  -- Pre-compute absolute path and other values outside of callback
+  local Helpers = require("avante.llm_tools.helpers")
+  local abs_path = Helpers.get_abs_path(input.path)
+  if not Helpers.has_permission_to_access(abs_path) then 
+    on_complete(false, "No permission to access path: " .. abs_path)
+    return
+  end
+  
+  local bufnr, err = Helpers.get_bufnr(abs_path)
+  if err then 
+    on_complete(false, err)
+    return
+  end
+
   local lines, read_error = Utils.read_file_from_buf_or_disk(input.path)
   if read_error then
     on_complete(false, "Failed to read file: " .. input.path .. " - " .. read_error)
@@ -170,43 +184,32 @@ M.func = function(input, opts)
         return
       end
       
-      local Helpers = require("avante.llm_tools.helpers")
-      
-      local abs_path = Helpers.get_abs_path(input.path)
-      if not Helpers.has_permission_to_access(abs_path) then 
-        on_complete(false, "No permission to access path: " .. abs_path)
-        return
-      end
-      
-      local bufnr, err = Helpers.get_bufnr(abs_path)
-      if err then 
-        on_complete(false, err)
-        return
-      end
-      
-      -- Split the merged code into lines
-      local new_lines = vim.split(merged_code, "\n")
-      
-      -- Replace the entire buffer content
-      local success, set_lines_err = pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
-      if not success then
-        on_complete(false, "Failed to update buffer: " .. (set_lines_err or "unknown error"))
-        return
-      end
-      
-      -- Mark the buffer as modified and save it
-      local save_success, save_err = pcall(function()
-        vim.api.nvim_buf_call(bufnr, function() 
-          vim.cmd("noautocmd write!") 
+      -- Use vim.schedule to avoid fast event context issues
+      vim.schedule(function()
+        -- Split the merged code into lines
+        local new_lines = vim.split(merged_code, "\n")
+        
+        -- Replace the entire buffer content
+        local success, set_lines_err = pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, new_lines)
+        if not success then
+          on_complete(false, "Failed to update buffer: " .. (set_lines_err or "unknown error"))
+          return
+        end
+        
+        -- Mark the buffer as modified and save it
+        local save_success, save_err = pcall(function()
+          vim.api.nvim_buf_call(bufnr, function() 
+            vim.cmd("noautocmd write!") 
+          end)
         end)
+        
+        if not save_success then
+          on_complete(false, "Failed to save file: " .. (save_err or "unknown error"))
+          return
+        end
+        
+        on_complete(true, nil)
       end)
-      
-      if not save_success then
-        on_complete(false, "Failed to save file: " .. (save_err or "unknown error"))
-        return
-      end
-      
-      on_complete(true, nil)
     end
   })
 end
