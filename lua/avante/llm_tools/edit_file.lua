@@ -52,7 +52,7 @@ M.returns = {
 }
 
 ---@type AvanteLLMToolFunc<{ path: string, instructions: string, code_edit: string }>
-M.func = vim.schedule_wrap(function(input, opts)
+M.func = function(input, opts)
   if opts.streaming then return false, "streaming not supported" end
   if not input.path then return false, "path not provided" end
   if not input.instructions then input.instructions = "" end
@@ -220,14 +220,10 @@ M.func = vim.schedule_wrap(function(input, opts)
         new_str = jsn.choices[1].message.content,
       }
       
-      -- Call str_replace.func with proper error handling
-      local success, error_msg = str_replace.func(new_input, opts)
-      if not success and error_msg then
-        on_complete(false, "str_replace failed: " .. error_msg)
-        return
-      end
+      -- str_replace.func is async and will call on_complete itself
+      str_replace.func(new_input, opts)
     end)
   )
-end)
+end
 
 return M
