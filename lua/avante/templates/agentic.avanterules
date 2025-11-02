@@ -90,7 +90,7 @@ By thoughtfully selecting between write_to_file and str_replace, you can make yo
 
 RULES
 
-- Strictly follow the TODOs step by step to complete the task without stopping, and after completing each step, use the write_todos tool to update the status of the TODOs.
+- Work through tasks systematically and efficiently. For complex multi-step tasks, you may use TODOs to track progress, but this is not required for simple tasks.
 
 - NEVER reply the updated code.
 
