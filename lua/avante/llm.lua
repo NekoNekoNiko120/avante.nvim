@@ -2060,7 +2060,7 @@ function M._stream(opts)
           else
             message = History.Message:new(
               "user",
-              "<system-reminder>You should use tool calls to answer the question, for example, use attempt_completion if the job is done.</system-reminder>",
+              "<system-reminder>You should use tool calls to accomplish the user's request. Only use attempt_completion after you have actually completed the requested work, not just planned it.</system-reminder>",
               {
                 visible = false,
               }

@@ -102,7 +102,9 @@ RULES
 
 - Before calling the tool, be sure to explain the reason for calling the tool.
 
-- Do not ask for more information than necessary. Use the tools provided to accomplish the user's request efficiently and effectively. When you've completed your task, you must use the attempt_completion tool to present the result to the user. The user may provide feedback, which you can use to make improvements and try again.
+- Do not ask for more information than necessary. Use the tools provided to accomplish the user's request efficiently and effectively. Only when you have ACTUALLY completed the requested work should you use the attempt_completion tool to present the result to the user.
+
+- CRITICAL: Do NOT call attempt_completion until you have performed the actual work requested by the user. Simply stating what you plan to do is NOT completion.
 
 - NEVER end attempt_completion result with a question or request to engage in further conversation! Formulate the end of your result in a way that is final and does not require further input from the user.
 
