@@ -308,6 +308,19 @@ function M.generate_prompts(opts)
 
   selected_files = vim.iter(selected_files):filter(function(file) return viewed_files[file.path] == nil end):totable()
 
+  -- Ensure all selected_files have proper string content
+  for i, file in ipairs(selected_files) do
+    if file.content and type(file.content) ~= "string" then
+      selected_files[i].content = tostring(file.content)
+    end
+    if file.path and type(file.path) ~= "string" then
+      selected_files[i].path = tostring(file.path)
+    end
+    if file.file_type and type(file.file_type) ~= "string" then
+      selected_files[i].file_type = tostring(file.file_type)
+    end
+  end
+
   local is_acp_provider = false
   if not opts.provider then is_acp_provider = Config.acp_providers[Config.provider] ~= nil end
   local model_name = "unknown"
@@ -321,19 +334,40 @@ function M.generate_prompts(opts)
     context_window = provider.context_window
   end
 
+  -- Ensure all string fields are properly converted to strings to avoid serialization errors
+  local function ensure_string(value)
+    if value == nil then
+      return nil
+    elseif type(value) == "string" then
+      return value
+    else
+      return tostring(value)
+    end
+  end
+
+  -- Ensure selected_code has proper string fields
+  local selected_code = opts.selected_code
+  if selected_code then
+    selected_code = {
+      path = ensure_string(selected_code.path),
+      content = ensure_string(selected_code.content),
+      file_type = ensure_string(selected_code.file_type),
+    }
+  end
+
   local template_opts = {
-    ask = opts.ask, -- TODO: add mode without ask instruction
-    code_lang = opts.code_lang,
+    ask = opts.ask and true or false, -- Ensure boolean
+    code_lang = ensure_string(opts.code_lang) or "unknown",
     selected_files = selected_files,
-    selected_code = opts.selected_code,
+    selected_code = selected_code,
     recently_viewed_files = opts.recently_viewed_files,
-    project_context = opts.project_context,
-    diagnostics = opts.diagnostics,
-    system_info = system_info,
-    model_name = model_name,
-    memory = opts.memory,
-    enable_fastapply = Config.behaviour.enable_fastapply,
-    use_react_prompt = use_react_prompt,
+    project_context = ensure_string(opts.project_context),
+    diagnostics = ensure_string(opts.diagnostics),
+    system_info = ensure_string(system_info),
+    model_name = ensure_string(model_name),
+    memory = ensure_string(opts.memory),
+    enable_fastapply = Config.behaviour.enable_fastapply and true or false, -- Ensure boolean
+    use_react_prompt = use_react_prompt and true or false, -- Ensure boolean
   }
 
   -- Removed the original todos processing logic, now handled in context_messages
@@ -342,7 +376,15 @@ function M.generate_prompts(opts)
   if opts.prompt_opts and opts.prompt_opts.system_prompt then
     system_prompt = opts.prompt_opts.system_prompt
   else
-    system_prompt = Path.prompts.render_mode(mode, template_opts)
+    -- Wrap render_mode call with error handling for better debugging
+    local ok, result = pcall(Path.prompts.render_mode, mode, template_opts)
+    if not ok then
+      Utils.error("Failed to render template mode '" .. tostring(mode) .. "': " .. tostring(result))
+      -- Provide a fallback system prompt
+      system_prompt = "You are a helpful AI assistant."
+    else
+      system_prompt = result
+    end
   end
 
   if Config.system_prompt ~= nil then
@@ -360,29 +402,39 @@ function M.generate_prompts(opts)
     context_messages = vim.list_extend(context_messages, opts.prompt_opts.messages)
   end
 
+  -- Helper function to safely render template files
+  local function safe_render_file(template_name, opts_param)
+    local ok, result = pcall(Path.prompts.render_file, template_name, opts_param)
+    if not ok then
+      Utils.error("Failed to render template '" .. template_name .. "': " .. tostring(result))
+      return ""
+    end
+    return result or ""
+  end
+
   if opts.project_context ~= nil and opts.project_context ~= "" and opts.project_context ~= "null" then
-    local project_context = Path.prompts.render_file("_project.avanterules", template_opts)
+    local project_context = safe_render_file("_project.avanterules", template_opts)
     if project_context ~= "" then
       table.insert(context_messages, { role = "user", content = project_context, visible = false, is_context = true })
     end
   end
 
   if opts.diagnostics ~= nil and opts.diagnostics ~= "" and opts.diagnostics ~= "null" then
-    local diagnostics = Path.prompts.render_file("_diagnostics.avanterules", template_opts)
+    local diagnostics = safe_render_file("_diagnostics.avanterules", template_opts)
     if diagnostics ~= "" then
       table.insert(context_messages, { role = "user", content = diagnostics, visible = false, is_context = true })
     end
   end
 
   if #selected_files > 0 or opts.selected_code ~= nil then
-    local code_context = Path.prompts.render_file("_context.avanterules", template_opts)
+    local code_context = safe_render_file("_context.avanterules", template_opts)
     if code_context ~= "" then
       table.insert(context_messages, { role = "user", content = code_context, visible = false, is_context = true })
     end
   end
 
   if opts.memory ~= nil and opts.memory ~= "" and opts.memory ~= "null" then
-    local memory = Path.prompts.render_file("_memory.avanterules", template_opts)
+    local memory = safe_render_file("_memory.avanterules", template_opts)
     if memory ~= "" then
       table.insert(context_messages, { role = "user", content = memory, visible = false, is_context = true })
     end
