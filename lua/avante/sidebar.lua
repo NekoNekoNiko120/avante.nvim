@@ -2181,11 +2181,27 @@ function Sidebar:render_state()
   then
     spinner_char = ""
   end
+  -- Universal state text mapping that works in any language
+  local state_text_map = {
+    generating = "generating",
+    ["tool calling"] = "tool calling",
+    thinking = "thinking",
+    searching = "searching",
+    compacting = "compacting",
+    failed = "failed",
+    succeeded = "succeeded",
+    cancelled = "cancelled",
+    initializing = "initializing",
+    initialized = "initialized"
+  }
+  
+  local display_text = state_text_map[self.current_state] or self.current_state
+  
   local virt_line
   if spinner_char == "" then
-    virt_line = " " .. self.current_state .. " "
+    virt_line = " " .. display_text .. " "
   else
-    virt_line = " " .. spinner_char .. " " .. self.current_state .. " "
+    virt_line = " " .. spinner_char .. " " .. display_text .. " "
   end
 
   local win_width = api.nvim_win_get_width(self.containers.result.winid)

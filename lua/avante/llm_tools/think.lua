@@ -9,21 +9,25 @@ local M = setmetatable({}, Base)
 M.name = "think"
 
 function M.enabled()
-  local Providers = require("avante.providers")
-  local Config = require("avante.config")
-  local acp_provider = Config.acp_providers[Config.provider]
-  if acp_provider then return true end
-  local provider = Providers[Config.provider]
-  local model = provider.model
-  if model and model:match("gpt%-5") then return false end
+  -- Always enable thinking tool for all models and providers
+  -- Thinking is a fundamental capability that should be available everywhere
   return true
 end
 
 M.description =
-  [[Use the tool to think about something. It will not obtain new information or make any changes to the repository, but just log the thought. Use it when complex reasoning or brainstorming is needed. For example, if you explore the repo and discover the source of a bug, call this tool to brainstorm several unique ways of fixing the bug, and assess which change(s) are likely to be simplest and most effective. Alternatively, if you receive some test results, call this tool to brainstorm ways to fix the failing tests.
+  [[Use this tool to think through complex problems step by step. This helps you organize your thoughts and show your reasoning process to the user. Use it when you need to:
+- Analyze a complex problem before taking action
+- Brainstorm multiple solutions and evaluate their pros/cons
+- Break down a large task into smaller steps
+- Reflect on the results of previous actions
+- Plan your next steps carefully
+
+The user will see your thinking process, which helps them understand your approach and builds confidence in your solutions.
 
 RULES:
-- Remember to frequently use the `think` tool to resolve tasks, especially before each tool call.
+- Use the `think` tool frequently, especially before making important decisions or tool calls
+- Show your reasoning process clearly and step by step
+- Consider multiple approaches and explain why you choose one over others
 ]]
 
 M.support_streaming = true
@@ -61,14 +65,23 @@ M.returns = {
 function M.on_render(input, opts)
   local state = opts.state
   local lines = {}
-  local text = state == "generating" and "Thinking" or "Thoughts"
-  table.insert(lines, Line:new({ { Utils.icon("🤔 ") .. text, Highlights.AVANTE_THINKING } }))
+  
+  -- Use simple, universal text that works in any language
+  local text = state == "generating" and "🤔 Thinking" or "💭 Thoughts"
+  
+  table.insert(lines, Line:new({ { text, Highlights.AVANTE_THINKING } }))
   table.insert(lines, Line:new({ { "" } }))
+  
   local content = input.thought or ""
-  local text_lines = vim.split(content, "\n")
-  for _, text_line in ipairs(text_lines) do
-    table.insert(lines, Line:new({ { "> " .. text_line } }))
+  if content == "" and state == "generating" then
+    table.insert(lines, Line:new({ { "> ...", Highlights.AVANTE_THINKING } }))
+  else
+    local text_lines = vim.split(content, "\n")
+    for _, text_line in ipairs(text_lines) do
+      table.insert(lines, Line:new({ { "> " .. text_line } }))
+    end
   end
+  
   return lines
 end
 
