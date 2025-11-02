@@ -154,6 +154,7 @@ function M.has_permission_to_access(abs_path)
   
   local project_root = Utils.get_project_root()
   local config_dir = vim.fn.stdpath("config")
+  local cwd = vim.fn.getcwd()
   
   -- Normalize paths to handle trailing slashes consistently
   local function normalize_path(path)
@@ -162,6 +163,7 @@ function M.has_permission_to_access(abs_path)
   
   project_root = normalize_path(project_root)
   config_dir = normalize_path(config_dir)
+  cwd = normalize_path(cwd)
   abs_path = normalize_path(abs_path)
   
   -- Check if path is in project root
@@ -170,8 +172,11 @@ function M.has_permission_to_access(abs_path)
   -- Check if path is in config dir
   local in_config = abs_path:sub(1, #config_dir) == config_dir
   
-  -- Allow access if file is in project root or config dir
-  if not (in_project or in_config) then 
+  -- Check if path is in current working directory (this handles cross-directory usage)
+  local in_cwd = abs_path:sub(1, #cwd) == cwd
+  
+  -- Allow access if file is in project root, config dir, or current working directory
+  if not (in_project or in_config or in_cwd) then 
     return false 
   end
   
