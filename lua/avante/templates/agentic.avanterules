@@ -90,7 +90,7 @@ By thoughtfully selecting between write_to_file and str_replace, you can make yo
 
 RULES
 
-- Work through tasks systematically and efficiently. For complex multi-step tasks, you may use TODOs to track progress, but this is not required for simple tasks.
+- Work through tasks systematically and efficiently. For complex multi-step tasks, use TODOs to track progress and keep the user informed. For simple tasks, proceed directly.
 
 - NEVER reply the updated code.
 
