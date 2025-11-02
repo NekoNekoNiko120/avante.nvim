@@ -258,6 +258,96 @@ end
 ---@param opts AvanteGeneratePromptsOptions
 ---@return AvantePromptOptions
 function M.generate_prompts(opts)
+  -- Ensure all string fields are properly converted to strings and clean binary data
+  local function ensure_string(value)
+    if value == nil then
+      return nil
+    elseif type(value) == "string" then
+      -- Clean any potential binary data (keep only printable characters, tabs, newlines)
+      -- Use table for better performance with large strings
+      local chars = {}
+      for i = 1, #value do
+        local byte = string.byte(value, i)
+        -- Keep printable characters (32-126), tab (9), newline (10), carriage return (13)
+        if (byte >= 32 and byte <= 126) or byte == 9 or byte == 10 or byte == 13 then
+          chars[#chars + 1] = string.char(byte)
+        end
+      end
+      return table.concat(chars)
+    else
+      local str = tostring(value)
+      -- Apply same cleaning to converted string
+      local chars = {}
+      for i = 1, #str do
+        local byte = string.byte(str, i)
+        if (byte >= 32 and byte <= 126) or byte == 9 or byte == 10 or byte == 13 then
+          chars[#chars + 1] = string.char(byte)
+        end
+      end
+      return table.concat(chars)
+    end
+  end
+
+  -- Recursively sanitize all data in a table to ensure no binary data
+  local function deep_sanitize(obj)
+    if type(obj) == "string" then
+      return ensure_string(obj)
+    elseif type(obj) == "table" then
+      local sanitized = {}
+      for k, v in pairs(obj) do
+        sanitized[k] = deep_sanitize(v)
+      end
+      return sanitized
+    elseif type(obj) == "boolean" then
+      return obj
+    elseif type(obj) == "number" then
+      return obj
+    elseif obj == nil then
+      return nil
+    else
+      return ensure_string(obj)
+    end
+  end
+
+  -- Helper function to debug template options and find binary data
+  local function debug_template_opts(opts_param, template_name)
+    if not Config.debug then return end
+    
+    local function check_for_binary(value, path)
+      if type(value) == "string" then
+        -- Check if string contains binary data (non-printable characters)
+        for i = 1, #value do
+          local byte = string.byte(value, i)
+          if byte < 32 and byte ~= 9 and byte ~= 10 and byte ~= 13 then -- Allow tab, newline, carriage return
+            Utils.debug("Found binary data in " .. path .. " at position " .. i .. " (byte: " .. byte .. ")")
+            return true
+          end
+        end
+      elseif type(value) == "table" then
+        for k, v in pairs(value) do
+          if check_for_binary(v, path .. "." .. tostring(k)) then
+            return true
+          end
+        end
+      end
+      return false
+    end
+    
+    Utils.debug("Checking template_opts for template: " .. template_name)
+    check_for_binary(opts_param, "template_opts")
+  end
+
+  -- Helper function to safely render template files
+  local function safe_render_file(template_name, opts_param)
+    debug_template_opts(opts_param, template_name)
+    local ok, result = pcall(Path.prompts.render_file, template_name, opts_param)
+    if not ok then
+      Utils.error("Failed to render template '" .. template_name .. "': " .. tostring(result))
+      return ""
+    end
+    return result or ""
+  end
+
   local project_instruction_file = Config.instructions_file or "avante.md"
   local project_root = Utils.root.get()
   local instruction_file_path = PPath:new(project_root, project_instruction_file)
@@ -308,10 +398,15 @@ function M.generate_prompts(opts)
 
   selected_files = vim.iter(selected_files):filter(function(file) return viewed_files[file.path] == nil end):totable()
 
-  -- Ensure all selected_files have proper string content
+  -- Ensure all selected_files have proper string content and remove any binary data
   for i, file in ipairs(selected_files) do
-    if file.content and type(file.content) ~= "string" then
-      selected_files[i].content = tostring(file.content)
+    if file.content then
+      if type(file.content) ~= "string" then
+        selected_files[i].content = tostring(file.content)
+      else
+        -- Clean any potential binary data from file content
+        selected_files[i].content = ensure_string(file.content)
+      end
     end
     if file.path and type(file.path) ~= "string" then
       selected_files[i].path = tostring(file.path)
@@ -334,18 +429,7 @@ function M.generate_prompts(opts)
     context_window = provider.context_window
   end
 
-  -- Ensure all string fields are properly converted to strings to avoid serialization errors
-  local function ensure_string(value)
-    if value == nil then
-      return nil
-    elseif type(value) == "string" then
-      return value
-    else
-      return tostring(value)
-    end
-  end
-
-  -- Ensure selected_code has proper string fields
+  -- Ensure selected_code has proper string fields and clean binary data
   local selected_code = opts.selected_code
   if selected_code then
     selected_code = {
@@ -355,12 +439,18 @@ function M.generate_prompts(opts)
     }
   end
 
+  -- Ensure recently_viewed_files is properly sanitized
+  local recently_viewed_files = opts.recently_viewed_files
+  if recently_viewed_files and type(recently_viewed_files) == "table" then
+    recently_viewed_files = vim.tbl_map(ensure_string, recently_viewed_files)
+  end
+
   local template_opts = {
     ask = opts.ask and true or false, -- Ensure boolean
     code_lang = ensure_string(opts.code_lang) or "unknown",
     selected_files = selected_files,
     selected_code = selected_code,
-    recently_viewed_files = opts.recently_viewed_files,
+    recently_viewed_files = recently_viewed_files,
     project_context = ensure_string(opts.project_context),
     diagnostics = ensure_string(opts.diagnostics),
     system_info = ensure_string(system_info),
@@ -370,6 +460,9 @@ function M.generate_prompts(opts)
     use_react_prompt = use_react_prompt and true or false, -- Ensure boolean
   }
 
+  -- Apply deep sanitization to ensure no binary data anywhere
+  template_opts = deep_sanitize(template_opts)
+
   -- Removed the original todos processing logic, now handled in context_messages
 
   local system_prompt
@@ -377,6 +470,7 @@ function M.generate_prompts(opts)
     system_prompt = opts.prompt_opts.system_prompt
   else
     -- Wrap render_mode call with error handling for better debugging
+    debug_template_opts(template_opts, "mode_" .. tostring(mode))
     local ok, result = pcall(Path.prompts.render_mode, mode, template_opts)
     if not ok then
       Utils.error("Failed to render template mode '" .. tostring(mode) .. "': " .. tostring(result))
@@ -400,16 +494,6 @@ function M.generate_prompts(opts)
   local context_messages = {}
   if opts.prompt_opts and opts.prompt_opts.messages then
     context_messages = vim.list_extend(context_messages, opts.prompt_opts.messages)
-  end
-
-  -- Helper function to safely render template files
-  local function safe_render_file(template_name, opts_param)
-    local ok, result = pcall(Path.prompts.render_file, template_name, opts_param)
-    if not ok then
-      Utils.error("Failed to render template '" .. template_name .. "': " .. tostring(result))
-      return ""
-    end
-    return result or ""
   end
 
   if opts.project_context ~= nil and opts.project_context ~= "" and opts.project_context ~= "null" then
