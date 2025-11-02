@@ -18,26 +18,14 @@
   <h1>avante.nvim</h1>
 </div>
 
-<div align="center">
-  <a href="https://neovim.io/" target="_blank">
-    <img src="https://img.shields.io/static/v1?style=flat-square&label=Neovim&message=v0.10%2b&logo=neovim&labelColor=282828&logoColor=8faa80&color=414b32" alt="Neovim: v0.10+" />
-  </a>
-  <a href="https://github.com/yetone/avante.nvim/actions/workflows/lua.yaml" target="_blank">
-    <img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/lua.yaml?style=flat-square&logo=lua&logoColor=c7c7c7&label=Lua+CI&labelColor=1E40AF&color=347D39&event=push" alt="Lua CI status" />
-  </a>
-  <a href="https://github.com/yetone/avante.nvim/actions/workflows/rust.yaml" target="_blank">
-    <img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/rust.yaml?style=flat-square&logo=rust&logoColor=ffffff&label=Rust+CI&labelColor=BC826A&color=347D39&event=push" alt="Rust CI status" />
-  </a>
-  <a href="https://github.com/yetone/avante.nvim/actions/workflows/pre-commit.yaml" target="_blank">
-    <img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/pre-commit.yaml?style=flat-square&logo=pre-commit&logoColor=ffffff&label=pre-commit&labelColor=FAAF3F&color=347D39&event=push" alt="pre-commit status" />
-  </a>
-  <a href="https://discord.gg/QfnEFEdSjz" target="_blank">
-    <img src="https://img.shields.io/discord/1302530866362323016?style=flat-square&logo=discord&label=Discord&logoColor=ffffff&labelColor=7376CF&color=268165" alt="Discord" />
-  </a>
-  <a href="https://dotfyle.com/plugins/yetone/avante.nvim">
-    <img src="https://dotfyle.com/plugins/yetone/avante.nvim/shield?style=flat-square" />
-  </a>
-</div>
+<p align="center">
+  <a href="https://neovim.io/" target="_blank"><img src="https://img.shields.io/static/v1?style=flat-square&label=Neovim&message=v0.10%2b&logo=neovim&labelColor=282828&logoColor=8faa80&color=414b32" alt="Neovim: v0.10+" /></a>
+  <a href="https://github.com/yetone/avante.nvim/actions/workflows/lua.yaml" target="_blank"><img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/lua.yaml?style=flat-square&logo=lua&logoColor=c7c7c7&label=Lua+CI&labelColor=1E40AF&color=347D39&event=push" alt="Lua CI status" /></a>
+  <a href="https://github.com/yetone/avante.nvim/actions/workflows/rust.yaml" target="_blank"><img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/rust.yaml?style=flat-square&logo=rust&logoColor=ffffff&label=Rust+CI&labelColor=BC826A&color=347D39&event=push" alt="Rust CI status" /></a>
+  <a href="https://github.com/yetone/avante.nvim/actions/workflows/pre-commit.yaml" target="_blank"><img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/pre-commit.yaml?style=flat-square&logo=pre-commit&logoColor=ffffff&label=pre-commit&labelColor=FAAF3F&color=347D39&event=push" alt="pre-commit status" /></a>
+  <a href="https://discord.gg/QfnEFEdSjz" target="_blank"><img src="https://img.shields.io/discord/1302530866362323016?style=flat-square&logo=discord&label=Discord&logoColor=ffffff&labelColor=7376CF&color=268165" alt="Discord" /></a>
+  <a href="https://dotfyle.com/plugins/yetone/avante.nvim"><img src="https://dotfyle.com/plugins/yetone/avante.nvim/shield?style=flat-square" /></a>
+</p>
 
 **avante.nvim** is a Neovim plugin designed to emulate the behaviour of the [Cursor](https://www.cursor.com) AI IDE. It provides users with AI-driven code suggestions and the ability to apply these recommendations directly to their source files with minimal effort.
 
@@ -500,10 +488,16 @@ _See [config.lua#L9](./lua/avante/config.lua) for the full config_
     support_paste_from_clipboard = false,
     minimize_diff = true, -- Whether to remove unchanged lines when applying a code block
     enable_token_counting = true, -- Whether to enable token counting. Default to true.
-    auto_approve_tool_permissions = false, -- Default: show permission prompts for all tools
+    auto_add_current_file = true, -- Whether to automatically add the current file when opening a new chat. Default to true.
+    auto_approve_tool_permissions = true, -- Default: auto-approve all tools (no prompts)
     -- Examples:
-    -- auto_approve_tool_permissions = true,                -- Auto-approve all tools (no prompts)
-    -- auto_approve_tool_permissions = {"bash", "replace_in_file"}, -- Auto-approve specific tools only
+    -- auto_approve_tool_permissions = false,                -- Show permission prompts for all tools
+    -- auto_approve_tool_permissions = {"bash", "str_replace"}, -- Auto-approve specific tools only
+    ---@type "popup" | "inline_buttons"
+    confirmation_ui_style = "inline_buttons",
+    --- Whether to automatically open files and navigate to lines when ACP agent makes edits
+    ---@type boolean
+    acp_follow_agent_locations = true,
   },
   prompt_logger = { -- logs prompts to disk (timestamped, for replay/debugging)
     enabled = true, -- toggle logging entirely
@@ -1160,14 +1154,17 @@ This approach ensures that the apply model can quickly and accurately merge your
 
 ## Ollama
 
-ollama is a first-class provider for avante.nvim. You can use it by setting `provider = "ollama"` in the configuration, and set the `model` field in `ollama` to the model you want to use. For example:
+Ollama is a first-class provider for avante.nvim. To start using it you need to set `provider = "ollama"`
+in the configuration, set the `model` field in `ollama` to the model you want to use. Ollama is disabled
+by default, you need to provide an implementation for its `is_env_set` method to properly enable it.
+For example:
 
 ```lua
 provider = "ollama",
 providers = {
   ollama = {
-    endpoint = "http://localhost:11434",
     model = "qwq:32b",
+    is_env_set = require("avante.providers.ollama").check_endpoint_alive,
   },
 }
 ```
@@ -1205,6 +1202,30 @@ To use ACP-compatible agents with Avante.nvim, you need to configure an ACP prov
 }
 ```
 
+#### Goose with ACP
+```lua
+{
+  provider = "goose",
+  -- other configuration options...
+}
+```
+
+#### Codex with ACP
+```lua
+{
+  provider = "codex",
+  -- other configuration options...
+}
+```
+
+#### Kimi CLI with ACP
+```lua
+{
+  provider = "kimi-cli",
+  -- other configuration options...
+}
+```
+
 ### ACP Configuration
 
 ACP providers are configured in the `acp_providers` section of your configuration:
@@ -1226,6 +1247,17 @@ ACP providers are configured in the `acp_providers` section of your configuratio
       env = {
         NODE_NO_WARNINGS = "1",
         ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY"),
+      },
+    },
+    ["goose"] = {
+      command = "goose",
+      args = { "acp" },
+    },
+    ["codex"] = {
+      command = "codex-acp",
+      env = {
+        NODE_NO_WARNINGS = "1",
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY"),
       },
     },
   },

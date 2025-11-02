@@ -56,9 +56,9 @@ function M.get_os_name()
 end
 
 function M.get_system_info()
-  local os_name = vim.loop.os_uname().sysname
-  local os_version = vim.loop.os_uname().release
-  local os_machine = vim.loop.os_uname().machine
+  local os_name = vim.uv.os_uname().sysname
+  local os_version = vim.uv.os_uname().release
+  local os_machine = vim.uv.os_uname().machine
   local lang = os.getenv("LANG")
   local shell = os.getenv("SHELL")
 
@@ -157,7 +157,7 @@ function M.shell_run_async(input_cmd, shell_cmd, on_complete, cwd, timeout)
 
   -- Set up timeout if specified
   if timeout and timeout > 0 then
-    timer = vim.loop.new_timer()
+    timer = vim.uv.new_timer()
     if timer then
       timer:start(timeout, 0, function()
         vim.schedule(function()
@@ -1281,56 +1281,42 @@ end
 ---@param skip_line_count? integer
 function M.update_buffer_lines(ns_id, bufnr, old_lines, new_lines, skip_line_count)
   skip_line_count = skip_line_count or 0
-  local diff_start_idx = 0
-  for i, line in ipairs(new_lines) do
-    local old_line = old_lines[i]
-    if not old_line or old_line ~= line then
-      diff_start_idx = i
-      break
-    end
-  end
-  if diff_start_idx > 0 then
-    -- Unbind events on old lines that will be replaced/moved
-    for i = diff_start_idx, #old_lines do
-      local old_line = old_lines[i]
-      if old_line and type(old_line.unbind_events) == "function" then
-        local line_1b = skip_line_count + i
-        pcall(old_line.unbind_events, old_line, bufnr, line_1b)
-      end
-    end
+  old_lines = old_lines or {}
+  new_lines = new_lines or {}
 
-    local changed_lines = vim.list_slice(new_lines, diff_start_idx)
-    local text_lines = vim.tbl_map(function(line) return tostring(line) end, changed_lines)
-    vim.api.nvim_buf_set_lines(
-      bufnr,
-      skip_line_count + diff_start_idx - 1,
-      skip_line_count + diff_start_idx + #changed_lines,
-      false,
-      text_lines
-    )
-    for i, line in ipairs(changed_lines) do
-      -- Apply highlights
-      if type(line.set_highlights) == "function" then
-        line:set_highlights(ns_id, bufnr, skip_line_count + diff_start_idx + i - 2)
-      end
-      -- Bind events if provided by the line
-      if type(line.bind_events) == "function" then
-        local line_1b = skip_line_count + diff_start_idx + i - 1
-        pcall(line.bind_events, line, ns_id, bufnr, line_1b)
-      end
+  -- Unbind events from existing lines before rewriting the buffer section.
+  for i, old_line in ipairs(old_lines) do
+    if old_line and type(old_line.unbind_events) == "function" then
+      local line_1b = skip_line_count + i
+      pcall(old_line.unbind_events, old_line, bufnr, line_1b)
     end
   end
-  if #old_lines > #new_lines then
-    -- Unbind events on removed trailing lines
-    for i = #new_lines + 1, #old_lines do
-      local old_line = old_lines[i]
-      if old_line and type(old_line.unbind_events) == "function" then
-        local line_1b = skip_line_count + i
-        pcall(old_line.unbind_events, old_line, bufnr, line_1b)
-      end
-    end
-    vim.api.nvim_buf_set_lines(bufnr, skip_line_count + #new_lines, skip_line_count + #old_lines, false, {})
+
+  -- Collect the text representation of each line and track their positions.
+  local cleaned_text_lines = {}
+  local line_positions = {}
+  local current_line_0b = skip_line_count
+
+  for idx, line in ipairs(new_lines) do
+    local pieces = vim.split(tostring(line), "\n")
+    line_positions[idx] = current_line_0b
+    vim.list_extend(cleaned_text_lines, pieces)
+    current_line_0b = current_line_0b + #pieces
   end
+
+  -- Replace the entire dynamic portion of the buffer.
+  vim.api.nvim_buf_set_lines(bufnr, skip_line_count, -1, false, cleaned_text_lines)
+
+  -- Re-apply highlights and bind events for the new lines.
+  for i, line in ipairs(new_lines) do
+    local line_pos_0b = line_positions[i] or (skip_line_count + i - 1)
+    if type(line.set_highlights) == "function" then line:set_highlights(ns_id, bufnr, line_pos_0b) end
+    if type(line.bind_events) == "function" then
+      local line_1b = line_pos_0b + 1
+      pcall(line.bind_events, line, ns_id, bufnr, line_1b)
+    end
+  end
+
   vim.cmd("redraw")
   -- local diffs = get_lines_diff(old_lines, new_lines)
   -- if #diffs == 0 then return end
@@ -1560,6 +1546,7 @@ function M.llm_tool_param_fields_to_json_schema(fields)
     end
     if not field.optional then table.insert(required, field.name) end
   end
+  if vim.tbl_isempty(properties) then properties = vim.empty_dict() end
   return properties, required
 end
 
@@ -1626,7 +1613,22 @@ function M.get_commands()
     )
     :totable()
 
-  return vim.list_extend(builtin_commands, Config.slash_commands)
+  local commands = {}
+  local seen = {}
+  for _, command in ipairs(Config.slash_commands) do
+    if not seen[command.name] then
+      table.insert(commands, command)
+      seen[command.name] = true
+    end
+  end
+  for _, command in ipairs(builtin_commands) do
+    if not seen[command.name] then
+      table.insert(commands, command)
+      seen[command.name] = true
+    end
+  end
+
+  return commands
 end
 
 function M.get_timestamp() return tostring(os.date("%Y-%m-%d %H:%M:%S")) end
@@ -1689,7 +1691,7 @@ end
 
 ---@param tool_use AvanteLLMToolUse
 function M.is_edit_tool_use(tool_use)
-  return tool_use.name == "replace_in_file"
+  return tool_use.name == "str_replace"
     or tool_use.name == "edit_file"
     or (tool_use.name == "str_replace_editor" and tool_use.input.command == "str_replace")
     or (tool_use.name == "str_replace_based_edit_tool" and tool_use.input.command == "str_replace")

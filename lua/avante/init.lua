@@ -18,9 +18,40 @@ local M = {
   suggestions = {},
   ---@type {sidebar?: avante.Sidebar, selection?: avante.Selection, suggestion?: avante.Suggestion}
   current = { sidebar = nil, selection = nil, suggestion = nil },
+  ---@type table<string, any> Global ACP client registry for cleanup on exit
+  acp_clients = {},
 }
 
 M.did_setup = false
+
+-- ACP Client Management Functions
+---Register an ACP client for cleanup on exit
+---@param client_id string Unique identifier for the client
+---@param client any ACP client instance
+function M.register_acp_client(client_id, client)
+  M.acp_clients[client_id] = client
+  Utils.debug("Registered ACP client: " .. client_id)
+end
+
+---Unregister an ACP client
+---@param client_id string Unique identifier for the client
+function M.unregister_acp_client(client_id)
+  M.acp_clients[client_id] = nil
+  Utils.debug("Unregistered ACP client: " .. client_id)
+end
+
+---Cleanup all registered ACP clients
+function M.cleanup_all_acp_clients()
+  Utils.debug("Cleaning up all ACP clients...")
+  for client_id, client in pairs(M.acp_clients) do
+    if client and client.stop then
+      Utils.debug("Stopping ACP client: " .. client_id)
+      pcall(function() client:stop() end)
+    end
+  end
+  M.acp_clients = {}
+  Utils.debug("All ACP clients cleaned up")
+end
 
 local H = {}
 
@@ -291,6 +322,21 @@ function H.autocmds()
     end,
   })
 
+  -- Fix Issue #2749: Cleanup ACP processes on Neovim exit
+  api.nvim_create_autocmd("VimLeavePre", {
+    group = H.augroup,
+    desc = "Cleanup all ACP processes before Neovim exits",
+    callback = function()
+      Utils.debug("VimLeavePre: Starting ACP cleanup...")
+      -- Cancel any inflight requests first
+      local ok, Llm = pcall(require, "avante.llm")
+      if ok then pcall(function() Llm.cancel_inflight_request() end) end
+      -- Cleanup all registered ACP clients
+      M.cleanup_all_acp_clients()
+      Utils.debug("VimLeavePre: ACP cleanup completed")
+    end,
+  })
+
   vim.schedule(function()
     M._init(api.nvim_get_current_tabpage())
     if Config.selection.enabled then M.current.selection:setup_autocmds() end
@@ -437,6 +483,8 @@ setmetatable(M.toggle, {
   __call = function() M.toggle_sidebar() end,
 })
 
+M.slash_commands_id = nil
+
 ---@param opts? avante.Config
 function M.setup(opts)
   ---PERF: we can still allow running require("avante").setup() multiple times to override config if users wish to
@@ -496,7 +544,7 @@ function M.setup(opts)
 
   local has_cmp, cmp = pcall(require, "cmp")
   if has_cmp then
-    cmp.register_source("avante_commands", require("cmp_avante.commands"):new())
+    M.slash_commands_id = cmp.register_source("avante_commands", require("cmp_avante.commands"):new())
 
     cmp.register_source("avante_mentions", require("cmp_avante.mentions"):new(Utils.get_chat_mentions))
 

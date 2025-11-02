@@ -118,8 +118,6 @@ vim.g.avante_login = vim.g.avante_login
 ---@field is_calling boolean | nil
 ---@field original_content AvanteLLMMessageContent | nil
 ---@field acp_tool_call? avante.acp.ToolCall
----@field permission_options? avante.acp.PermissionOption[]
----@field is_permission_confirming? boolean
 
 ---@class AvanteLLMToolResult
 ---@field tool_name string
@@ -206,10 +204,22 @@ vim.g.avante_login = vim.g.avante_login
 ---@field reasoning_content? string
 ---@field reasoning? string
 ---@field tool_calls? AvanteOpenAIMessageToolCall[]
+---@field type? "reasoning" | "function_call" | "function_call_output"
+---@field id? string
+---@field encrypted_content? string
+---@field summary? string
+---@field call_id? string
+---@field name? string
+---@field arguments? string
+---@field output? string
 ---
 ---@class AvanteOpenAITool
 ---@field type "function"
----@field function AvanteOpenAIToolFunction
+---@field function? AvanteOpenAIToolFunction
+---@field name? string
+---@field description? string | nil
+---@field parameters? AvanteOpenAIToolFunctionParameters | nil
+---@field strict? boolean | nil
 ---
 ---@class AvanteOpenAIToolFunction
 ---@field name string
@@ -232,7 +242,7 @@ vim.g.avante_login = vim.g.avante_login
 ---@alias AvanteMessagesParser fun(self: AvanteProviderFunctor, opts: AvantePromptOptions): AvanteChatMessage[]
 ---
 ---@class AvanteCurlOutput: {url: string, proxy: string, insecure: boolean, body: table<string, any> | string, headers: table<string, string>, rawArgs: string[] | nil}
----@alias AvanteCurlArgsParser fun(self: AvanteProviderFunctor, prompt_opts: AvantePromptOptions): AvanteCurlOutput
+---@alias AvanteCurlArgsParser fun(self: AvanteProviderFunctor, prompt_opts: AvantePromptOptions): (AvanteCurlOutput | nil)
 ---
 ---@alias AvanteResponseParser fun(self: AvanteProviderFunctor, ctx: any, data_stream: string, event_state: string, opts: AvanteHandlerOptions): nil
 ---
@@ -253,6 +263,8 @@ vim.g.avante_login = vim.g.avante_login
 ---@field hide_in_model_selector? boolean
 ---@field use_ReAct_prompt? boolean
 ---@field context_window? integer
+---@field use_response_api? boolean | fun(provider: AvanteDefaultBaseProvider, ctx?: any): boolean
+---@field support_previous_response_id? boolean
 ---
 ---@class AvanteSupportedProvider: AvanteDefaultBaseProvider
 ---@field __inherited_from? string
@@ -419,6 +431,7 @@ vim.g.avante_login = vim.g.avante_login
 ---@class AvanteLLMStreamOptions: AvanteGeneratePromptsOptions
 ---@field acp_client? avante.acp.ACPClient
 ---@field on_save_acp_client? fun(client: avante.acp.ACPClient): nil
+---@field just_connect_acp_client? boolean
 ---@field acp_session_id? string
 ---@field on_save_acp_session_id? fun(session_id: string): nil
 ---@field on_start AvanteLLMStartCallback
@@ -485,7 +498,7 @@ vim.g.avante_login = vim.g.avante_login
 ---@class AvanteLLMToolReturn
 ---@field name string
 ---@field description string
----@field type 'string' | 'string[]' | 'boolean'
+---@field type 'string' | 'string[]' | 'boolean' | 'array'
 ---@field optional? boolean
 ---
 ---@class avante.ChatHistoryEntry
@@ -503,9 +516,9 @@ vim.g.avante_login = vim.g.avante_login
 ---@class avante.ChatHistory
 ---@field title string
 ---@field timestamp string
----@field messages avante.HistoryMessage[] | nil
----@field entries avante.ChatHistoryEntry[] | nil
----@field todos avante.TODO[] | nil
+---@field messages avante.HistoryMessage[]
+---@field entries avante.ChatHistoryEntry[]
+---@field todos avante.TODO[]
 ---@field memory avante.ChatMemory | nil
 ---@field filename string
 ---@field system_prompt string | nil

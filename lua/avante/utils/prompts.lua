@@ -126,7 +126,7 @@ Parameters:
 
 ## Example 3: Requesting to make targeted edits to a file
 
-<tool_use>{"name": "replace_in_file", "input": {"path": "src/components/App.tsx", "the_diff": "------- SEARCH\nimport React from 'react';\n=======\nimport React, { useState } from 'react';\n+++++++ REPLACE\n\n------- SEARCH\nfunction handleSubmit() {\n  saveData();\n  setLoading(false);\n}\n\n=======\n+++++++ REPLACE\n\n------- SEARCH\nreturn (\n  <div>\n=======\nfunction handleSubmit() {\n  saveData();\n  setLoading(false);\n}\n\nreturn (\n  <div>\n+++++++ REPLACE\n"}}</tool_use>
+<tool_use>{"name": "str_replace", "input": {"path": "src/components/App.tsx", "old_str": "import React from 'react';", "new_str": "import React, { useState } from 'react';"}}</tool_use>
 ]]
     end
 
@@ -136,13 +136,9 @@ Parameters:
 
 <tool_use>{"name": "attempt_completion", "input": {"result": "I've successfully created the requested React component with the following features:\n- Responsive layout\n- Dark/light mode toggle\n- Form validation\n- API integration"}}</tool_use>
 
-## Example 5: Add todos
+## Example 5: Write todos
 
-<tool_use>{"name": "add_todos", "input": {"todos": [{"id": "1", "content": "Implement a responsive layout", "status": "todo", "priority": "low"}, {"id": "2", "content": "Add dark/light mode toggle", "status": "todo", "priority": "medium"}]}}</tool_use>
-
-## Example 6: Update todo status
-
-<tool_use>{"name": "update_todo_status", "input": {"id": "1", "status": "done"}}</tool_use>
+<tool_use>{"name": "write_todos", "input": {"todos": [{"id": "1", "content": "Implement a responsive layout", "status": "todo", "priority": "low"}, {"id": "2", "content": "Add dark/light mode toggle", "status": "todo", "priority": "medium"}]}}</tool_use>
 ]]
   end
   return system_prompt

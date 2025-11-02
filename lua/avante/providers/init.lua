@@ -229,9 +229,13 @@ end
 function M.refresh(provider_name)
   require("avante.config").override({ provider = provider_name })
 
-  ---@type AvanteProviderFunctor | AvanteBedrockProviderFunctor
-  local p = M[Config.provider]
-  E.setup({ provider = p, refresh = true })
+  if Config.acp_providers[provider_name] then
+    Config.provider = provider_name
+  else
+    ---@type AvanteProviderFunctor | AvanteBedrockProviderFunctor
+    local p = M[Config.provider]
+    E.setup({ provider = p, refresh = true })
+  end
   Utils.info("Switch to provider: " .. provider_name, { once = true, title = "Avante" })
 end
 
@@ -250,6 +254,22 @@ function M.parse_config(opts)
   local request_body = opts.extra_request_body or {}
 
   return provider_opts, request_body
+end
+
+---@param provider_conf table | nil
+---@param ctx any
+---@return boolean
+function M.resolve_use_response_api(provider_conf, ctx)
+  if not provider_conf then return false end
+  local value = provider_conf.use_response_api
+  if type(value) ~= "function" then value = provider_conf._use_response_api_resolver or value end
+  if type(value) == "function" then
+    provider_conf._use_response_api_resolver = value
+    local ok, result = pcall(value, provider_conf, ctx)
+    if not ok then error("Failed to evaluate use_response_api: " .. result, 2) end
+    return result == true
+  end
+  return value == true
 end
 
 ---@param provider_name avante.ProviderName

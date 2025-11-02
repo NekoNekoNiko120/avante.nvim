@@ -124,8 +124,13 @@ local Utils = require("avante.utils")
 ---@class avante.acp.Plan
 ---@field entries avante.acp.PlanEntry[]
 
+---@class avante.acp.AvailableCommand
+---@field name string
+---@field description string
+---@field input? table<string, any>
+
 ---@class avante.acp.BaseSessionUpdate
----@field sessionUpdate "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update" | "plan"
+---@field sessionUpdate "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update" | "plan" | "available_commands_update"
 
 ---@class avante.acp.UserMessageChunk : avante.acp.BaseSessionUpdate
 ---@field sessionUpdate "user_message_chunk"
@@ -153,6 +158,10 @@ local Utils = require("avante.utils")
 ---@class avante.acp.PlanUpdate : avante.acp.BaseSessionUpdate
 ---@field sessionUpdate "plan"
 ---@field entries avante.acp.PlanEntry[]
+
+---@class avante.acp.AvailableCommandsUpdate : avante.acp.BaseSessionUpdate
+---@field sessionUpdate "available_commands_update"
+---@field availableCommands avante.acp.AvailableCommand[]
 
 ---@class avante.acp.PermissionOption
 ---@field optionId string
@@ -196,7 +205,7 @@ ACPClient.ERROR_CODES = {
 }
 
 ---@class ACPHandlers
----@field on_session_update? fun(update: avante.acp.UserMessageChunk | avante.acp.AgentMessageChunk | avante.acp.AgentThoughtChunk | avante.acp.ToolCallUpdate | avante.acp.PlanUpdate)
+---@field on_session_update? fun(update: avante.acp.UserMessageChunk | avante.acp.AgentMessageChunk | avante.acp.AgentThoughtChunk | avante.acp.ToolCallUpdate | avante.acp.PlanUpdate | avante.acp.AvailableCommandsUpdate)
 ---@field on_request_permission? fun(tool_call: table, options: table[], callback: fun(option_id: string | nil)): nil
 ---@field on_read_file? fun(path: string, line: integer | nil, limit: integer | nil, callback: fun(content: string)): nil
 ---@field on_write_file? fun(path: string, content: string, callback: fun(error: string|nil)): nil
@@ -285,13 +294,20 @@ end
 
 ---Create stdio transport layer
 function ACPClient:_create_stdio_transport()
-  local uv = vim.loop
+  local uv = vim.uv or vim.loop
+
+  --- @class avante.acp.ACPTransportInstance
   local transport = {
+    --- @type uv.uv_pipe_t|nil
     stdin = nil,
+    --- @type uv.uv_pipe_t|nil
     stdout = nil,
+    --- @type uv.uv_process_t|nil
     process = nil,
   }
 
+  --- @param transport_self avante.acp.ACPTransportInstance
+  --- @param data string
   function transport.send(transport_self, data)
     if transport_self.stdin and not transport_self.stdin:is_closing() then
       transport_self.stdin:write(data .. "\n")
@@ -300,6 +316,8 @@ function ACPClient:_create_stdio_transport()
     return false
   end
 
+  --- @param transport_self avante.acp.ACPTransportInstance
+  --- @param on_message fun(message: any)
   function transport.start(transport_self, on_message)
     self:_set_state("connecting")
 
@@ -397,19 +415,28 @@ function ACPClient:_create_stdio_transport()
 
     -- Read stderr for debugging
     stderr:read_start(function(_, data)
-      if data then
-        -- Filter out common session recovery error messages to avoid user confusion
-        if not (data:match("Session not found") or data:match("session/prompt")) then
-          vim.schedule(function() vim.notify("ACP stderr: " .. data, vim.log.levels.DEBUG) end)
-        end
-      end
+      -- if data then
+      --   -- Filter out common session recovery error messages to avoid user confusion
+      --   if not (data:match("Session not found") or data:match("session/prompt")) then
+      --     vim.schedule(function() vim.notify("ACP stderr: " .. data, vim.log.levels.DEBUG) end)
+      --   end
+      -- end
     end)
   end
 
+  --- @param transport_self avante.acp.ACPTransportInstance
   function transport.stop(transport_self)
-    if transport_self.process then
-      transport_self.process:close()
+    if transport_self.process and not transport_self.process:is_closing() then
+      local process = transport_self.process
       transport_self.process = nil
+
+      if not process then return end
+
+      -- Try to terminate gracefully
+      pcall(function() process:kill(15) end)
+      -- then force kill, it'll fail harmlessly if already exited
+      pcall(function() process:kill(9) end)
+      process:close()
     end
     if transport_self.stdin then
       transport_self.stdin:close()
@@ -509,7 +536,7 @@ function ACPClient:_send_result(id, result)
 
   local data = vim.json.encode(message)
   if self.debug_log_file then
-    self.debug_log_file:write("request: " .. data .. string.rep("=", 100) .. "\n")
+    self.debug_log_file:write("request: " .. data .. "\n" .. string.rep("=", 100) .. "\n")
     self.debug_log_file:flush()
   end
   self.transport:send(data)

@@ -3,26 +3,14 @@
   <h1>avante.nvim</h1>
 </div>
 
-<div align="center">
-  <a href="https://neovim.io/" target="_blank">
-    <img src="https://img.shields.io/static/v1?style=flat-square&label=Neovim&message=v0.10%2b&logo=neovim&labelColor=282828&logoColor=8faa80&color=414b32" alt="Neovim: v0.10+" />
-  </a>
-  <a href="https://github.com/yetone/avante.nvim/actions/workflows/lua.yaml" target="_blank">
-    <img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/lua.yaml?style=flat-square&logo=lua&logoColor=c7c7c7&label=Lua+CI&labelColor=1E40AF&color=347D39&event=push" alt="Lua CI status" />
-  </a>
-  <a href="https://github.com/yetone/avante.nvim/actions/workflows/rust.yaml" target="_blank">
-    <img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/rust.yaml?style=flat-square&logo=rust&logoColor=ffffff&label=Rust+CI&labelColor=BC826A&color=347D39&event=push" alt="Rust CI status" />
-  </a>
-  <a href="https://github.com/yetone/avante.nvim/actions/workflows/pre-commit.yaml" target="_blank">
-    <img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/pre-commit.yaml?style=flat-square&logo=pre-commit&logoColor=ffffff&label=pre-commit&labelColor=FAAF3F&color=347D39&event=push" alt="pre-commit status" />
-  </a>
-  <a href="https://discord.gg/QfnEFEdSjz" target="_blank">
-    <img src="https://img.shields.io/discord/1302530866362323016?style=flat-square&logo=discord&label=Discord&logoColor=ffffff&labelColor=7376CF&color=268165" alt="Discord" />
-  </a>
-  <a href="https://dotfyle.com/plugins/yetone/avante.nvim">
-    <img src="https://dotfyle.com/plugins/yetone/avante.nvim/shield?style=flat-square" />
-  </a>
-</div>
+<p align="center">
+  <a href="https://neovim.io/" target="_blank"><img src="https://img.shields.io/static/v1?style=flat-square&label=Neovim&message=v0.10%2b&logo=neovim&labelColor=282828&logoColor=8faa80&color=414b32" alt="Neovim: v0.10+" /></a>
+  <a href="https://github.com/yetone/avante.nvim/actions/workflows/lua.yaml" target="_blank"><img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/lua.yaml?style=flat-square&logo=lua&logoColor=c7c7c7&label=Lua+CI&labelColor=1E40AF&color=347D39&event=push" alt="Lua CI status" /></a>
+  <a href="https://github.com/yetone/avante.nvim/actions/workflows/rust.yaml" target="_blank"><img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/rust.yaml?style=flat-square&logo=rust&logoColor=ffffff&label=Rust+CI&labelColor=BC826A&color=347D39&event=push" alt="Rust CI status" /></a>
+  <a href="https://github.com/yetone/avante.nvim/actions/workflows/pre-commit.yaml" target="_blank"><img src="https://img.shields.io/github/actions/workflow/status/yetone/avante.nvim/pre-commit.yaml?style=flat-square&logo=pre-commit&logoColor=ffffff&label=pre-commit&labelColor=FAAF3F&color=347D39&event=push" alt="pre-commit status" /></a>
+  <a href="https://discord.gg/QfnEFEdSjz" target="_blank"><img src="https://img.shields.io/discord/1302530866362323016?style=flat-square&logo=discord&label=Discord&logoColor=ffffff&labelColor=7376CF&color=268165" alt="Discord" /></a>
+  <a href="https://dotfyle.com/plugins/yetone/avante.nvim"><img src="https://dotfyle.com/plugins/yetone/avante.nvim/shield?style=flat-square" /></a>
+</p>
 
 **avante.nvim** 是一个 Neovim 插件，旨在模拟 [Cursor](https://www.cursor.com) AI IDE 的行为。它为用户提供 AI 驱动的代码建议，并能够轻松地将这些建议直接应用到源文件中。
 
@@ -360,8 +348,11 @@ _请参见 [config.lua#L9](./lua/avante/config.lua) 以获取完整配置_
     support_paste_from_clipboard = false,
     minimize_diff = true, -- 是否在应用代码块时删除未更改的行
     enable_token_counting = true, -- 是否启用令牌计数。默认为 true。
+    auto_add_current_file = true, -- 打开新聊天时是否自动添加当前文件。默认为 true。
     enable_cursor_planning_mode = false, -- 是否启用 Cursor 规划模式。默认为 false。
     enable_claude_text_editor_tool_mode = false, -- 是否启用 Claude 文本编辑器工具模式。
+    ---@type "popup" | "inline_buttons"
+    confirmation_ui_style = "inline_buttons",
   },
   mappings = {
     --- @class AvanteConflictMappings
@@ -787,13 +778,14 @@ return {
 
 ## Ollama
 
-ollama 是 avante.nvim 的一流提供者。您可以通过在配置中设置 `provider = "ollama"` 来使用它，并在 `ollama` 中设置 `model` 字段为您想要使用的模型。例如：
+ollama 是 avante.nvim 的一流提供者。要开始使用它，您需要在配置中设置 `provider = "ollama"`，并将 `ollama` 中的 `model` 字段设置为您想要使用的模型。Ollama 默认是禁用的，您需要为其 `is_env_set` 方法提供一个实现来正确地启用它。例如：
 
 ```lua
 provider = "ollama",
 providers = {
   ollama = {
     model = "qwq:32b",
+    is_env_set = require("avante.providers.ollama").check_endpoint_alive,
   },
 }
 ```

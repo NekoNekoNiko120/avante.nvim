@@ -6,6 +6,11 @@
 
 local Utils = require("avante.utils")
 
+local function copilot_use_response_api(opts)
+  local model = opts and opts.model
+  return type(model) == "string" and model:match("gpt%-5%-codex") ~= nil
+end
+
 ---@class avante.file_selector.IParams
 ---@field public title      string
 ---@field public filepaths  string[]
@@ -249,7 +254,7 @@ M._defaults = {
     },
     ["claude-code"] = {
       command = "npx",
-      args = { "@zed-industries/claude-code-acp" },
+      args = { "-y", "@zed-industries/claude-code-acp" },
       env = {
         NODE_NO_WARNINGS = "1",
         ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY"),
@@ -262,6 +267,23 @@ M._defaults = {
       command = "goose",
       args = { "acp" },
     },
+    ["codex"] = {
+      command = "codex-acp",
+      env = {
+        NODE_NO_WARNINGS = "1",
+        HOME = os.getenv("HOME"),
+        PATH = os.getenv("PATH"),
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY"),
+      },
+    },
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+    },
+    ["kimi-cli"] = {
+      command = "kimi",
+      args = { "--acp" },
+    },
   },
   ---To add support for custom provider, follow the format below
   ---See https://github.com/yetone/avante.nvim/wiki#custom-providers for more details
@@ -273,10 +295,15 @@ M._defaults = {
       model = "gpt-4o",
       timeout = 30000, -- Timeout in milliseconds, increase this for reasoning models
       context_window = 128000, -- Number of tokens to send to the model for context
+      use_response_api = copilot_use_response_api, -- Automatically switch to Response API for GPT-5 Codex models
+      support_previous_response_id = true, -- OpenAI Response API supports previous_response_id for stateful conversations
+      -- NOTE: Response API automatically manages conversation state using previous_response_id for tool calling
       extra_request_body = {
         temperature = 0.75,
-        max_completion_tokens = 16384, -- Increase this to include reasoning tokens (for reasoning models)
-        reasoning_effort = "medium", -- low|medium|high, only used for reasoning models
+        max_completion_tokens = 16384, -- Increase this to include reasoning tokens (for reasoning models). For Response API, will be converted to max_output_tokens
+        reasoning_effort = "medium", -- low|medium|high, only used for reasoning models. For Response API, this will be converted to reasoning.effort
+        -- background = false, -- Response API only: set to true to start a background task
+        -- NOTE: previous_response_id is automatically managed by the provider for tool calling - don't set manually
       },
     },
     ---@type AvanteSupportedProvider
@@ -287,8 +314,12 @@ M._defaults = {
       allow_insecure = false, -- Allow insecure server connections
       timeout = 30000, -- Timeout in milliseconds
       context_window = 64000, -- Number of tokens to send to the model for context
+      use_response_api = copilot_use_response_api, -- Automatically switch to Response API for GPT-5 Codex models
+      support_previous_response_id = false, -- Copilot doesn't support previous_response_id, must send full history
+      -- NOTE: Copilot doesn't support previous_response_id, always sends full conversation history including tool_calls
+      -- NOTE: Response API doesn't support some parameters like top_p, frequency_penalty, presence_penalty
       extra_request_body = {
-        temperature = 0.75,
+        -- temperature is not supported by Response API for reasoning models
         max_tokens = 20480,
       },
     },
@@ -307,7 +338,7 @@ M._defaults = {
     ---@type AvanteSupportedProvider
     claude = {
       endpoint = "https://api.anthropic.com",
-      model = "claude-sonnet-4-20250514",
+      model = "claude-sonnet-4-5-20250929",
       timeout = 30000, -- Timeout in milliseconds
       context_window = 200000,
       extra_request_body = {
@@ -373,6 +404,7 @@ M._defaults = {
     ollama = {
       endpoint = "http://127.0.0.1:11434",
       timeout = 30000, -- Timeout in milliseconds
+      use_ReAct_prompt = true,
       extra_request_body = {
         options = {
           temperature = 0.75,
@@ -458,7 +490,7 @@ M._defaults = {
     glm = {
       __inherited_from = "openai",
       endpoint = "https://open.bigmodel.cn/api/coding/paas/v4",
-      model = "glm-4.5",
+      model = "GLM-4.6",
       api_key_name = "GLM_API_KEY",
     },
     qwen = {
@@ -496,6 +528,7 @@ M._defaults = {
   ---7. support_paste_from_clipboard    : Whether to support pasting image from clipboard. This will be determined automatically based whether img-clip is available or not.
   ---8. minimize_diff                   : Whether to remove unchanged lines when applying a code block
   ---9. enable_token_counting           : Whether to enable token counting. Default to true.
+  ---10. auto_add_current_file          : Whether to automatically add the current file when opening a new chat. Default to true.
   behaviour = {
     auto_focus_sidebar = true,
     auto_suggestions = false, -- Experimental stage
@@ -510,10 +543,18 @@ M._defaults = {
     use_cwd_as_project_root = false,
     auto_focus_on_diff_view = false,
     ---@type boolean | string[] -- true: auto-approve all tools, false: normal prompts, string[]: auto-approve specific tools by name
-    auto_approve_tool_permissions = true, -- Default: show permission prompts for all tools
+    auto_approve_tool_permissions = true, -- Default: auto-approve all tools (no prompts)
     auto_check_diagnostics = true,
     enable_fastapply = true,
     include_generated_by_commit_line = false, -- Controls if 'Generated-by: <provider/model>' line is added to git commit message
+    auto_add_current_file = true, -- Whether to automatically add the current file when opening a new chat
+    --- popup is the original yes,all,no in a floating window
+    --- inline_buttons is the new inline buttons in the sidebar
+    ---@type "popup" | "inline_buttons"
+    confirmation_ui_style = "inline_buttons",
+    --- Whether to automatically open files and navigate to lines when ACP agent makes edits
+    ---@type boolean
+    acp_follow_agent_locations = true,
   },
   prompt_logger = { -- logs prompts to disk (timestamped, for replay/debugging)
     enabled = true, -- toggle logging entirely

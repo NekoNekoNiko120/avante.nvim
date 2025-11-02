@@ -643,7 +643,6 @@ end
 
 ---@type AvanteLLMTool[]
 M._tools = {
-  require("avante.llm_tools.replace_in_file"),
   require("avante.llm_tools.dispatch_agent"),
   require("avante.llm_tools.glob"),
   {
@@ -783,8 +782,8 @@ M._tools = {
   require("avante.llm_tools.ls"),
   require("avante.llm_tools.grep"),
   require("avante.llm_tools.delete_tool_use_messages"),
-  require("avante.llm_tools.add_todos"),
-  require("avante.llm_tools.update_todo_status"),
+  require("avante.llm_tools.read_todos"),
+  require("avante.llm_tools.write_todos"),
   {
     name = "read_file_toplevel_symbols",
     description = [[Read the top-level symbols of a file in current project scope.
@@ -1353,7 +1352,7 @@ function M.process_tool_use(tools, tool_use, opts)
   -- Set up a timer to periodically check for cancellation
   local cancel_timer
   if on_complete then
-    cancel_timer = vim.loop.new_timer()
+    cancel_timer = vim.uv.new_timer()
     if cancel_timer then
       cancel_timer:start(
         100,
