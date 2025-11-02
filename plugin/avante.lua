@@ -184,3 +184,25 @@ cmd("ShowRepoMap", function() require("avante.repo_map").show() end, { desc = "a
 cmd("Models", function() require("avante.model_selector").open() end, { desc = "avante: show models" })
 cmd("History", function() require("avante.api").select_history() end, { desc = "avante: show histories" })
 cmd("Stop", function() require("avante.api").stop() end, { desc = "avante: stop current AI request" })
+cmd("AutoBuild", function(opts) 
+  local build_checker = require("avante.build_checker")
+  local args = Utils.parse_args(opts.fargs)
+  
+  if args.sync then
+    build_checker.auto_build_sync()
+  else
+    build_checker.auto_build()
+  end
+end, { 
+  desc = "avante: automatically build required libraries", 
+  nargs = "*",
+  complete = function(_, _, _) return { "sync=true", "sync=false" } end
+})
+cmd("CheckBuild", function() 
+  local build_checker = require("avante.build_checker")
+  if build_checker.is_build_needed() then
+    build_checker.check_and_prompt()
+  else
+    Utils.info("✅ All Avante libraries are present and ready!")
+  end
+end, { desc = "avante: check if build is needed" })

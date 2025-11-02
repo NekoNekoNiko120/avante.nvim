@@ -151,12 +151,30 @@ end
 ---@return boolean
 function M.has_permission_to_access(abs_path)
   if not Path:new(abs_path):is_absolute() then return false end
+  
   local project_root = Utils.get_project_root()
-  -- allow if inside project root OR inside user config dir
   local config_dir = vim.fn.stdpath("config")
+  
+  -- Normalize paths to handle trailing slashes consistently
+  local function normalize_path(path)
+    return path:gsub("/$", "")
+  end
+  
+  project_root = normalize_path(project_root)
+  config_dir = normalize_path(config_dir)
+  abs_path = normalize_path(abs_path)
+  
+  -- Check if path is in project root
   local in_project = abs_path:sub(1, #project_root) == project_root
+  
+  -- Check if path is in config dir
   local in_config = abs_path:sub(1, #config_dir) == config_dir
-  if not in_project and not in_config then return false end
+  
+  -- Allow access if file is in project root or config dir
+  if not (in_project or in_config) then 
+    return false 
+  end
+  
   return not M.is_ignored(abs_path)
 end
 

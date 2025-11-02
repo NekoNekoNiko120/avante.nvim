@@ -309,17 +309,34 @@ function M.generate_prompts(opts)
     end
   end
 
+  -- Create ultra-safe template options by rebuilding from scratch
+  local function create_safe_template_opts(unsafe_opts)
+    return {
+      ask = (unsafe_opts.ask == true),
+      code_lang = ensure_string(unsafe_opts.code_lang) or "unknown",
+      selected_files = type(unsafe_opts.selected_files) == "table" and deep_sanitize(unsafe_opts.selected_files) or {},
+      selected_code = type(unsafe_opts.selected_code) == "table" and deep_sanitize(unsafe_opts.selected_code) or nil,
+      recently_viewed_files = type(unsafe_opts.recently_viewed_files) == "table" and deep_sanitize(unsafe_opts.recently_viewed_files) or {},
+      project_context = ensure_string(unsafe_opts.project_context) or "",
+      diagnostics = ensure_string(unsafe_opts.diagnostics) or "",
+      system_info = ensure_string(unsafe_opts.system_info) or "",
+      model_name = ensure_string(unsafe_opts.model_name) or "unknown",
+      memory = ensure_string(unsafe_opts.memory) or "",
+      enable_fastapply = (unsafe_opts.enable_fastapply == true),
+      use_react_prompt = (unsafe_opts.use_react_prompt == true),
+    }
+  end
+
   -- Helper function to debug template options and find binary data
   local function debug_template_opts(opts_param, template_name)
-    if not Config.debug then return end
-    
+    -- Always run this check, not just in debug mode, to catch binary data issues
     local function check_for_binary(value, path)
       if type(value) == "string" then
         -- Check if string contains binary data (non-printable characters)
         for i = 1, #value do
           local byte = string.byte(value, i)
           if byte < 32 and byte ~= 9 and byte ~= 10 and byte ~= 13 then -- Allow tab, newline, carriage return
-            Utils.debug("Found binary data in " .. path .. " at position " .. i .. " (byte: " .. byte .. ")")
+            Utils.error("CRITICAL: Found binary data in " .. path .. " at position " .. i .. " (byte: " .. byte .. ") for template: " .. template_name)
             return true
           end
         end
@@ -333,17 +350,47 @@ function M.generate_prompts(opts)
       return false
     end
     
-    Utils.debug("Checking template_opts for template: " .. template_name)
+    if Config.debug then
+      Utils.debug("Checking template_opts for template: " .. template_name)
+    end
     check_for_binary(opts_param, "template_opts")
   end
 
   -- Helper function to safely render template files
   local function safe_render_file(template_name, opts_param)
-    debug_template_opts(opts_param, template_name)
-    local ok, result = pcall(Path.prompts.render_file, template_name, opts_param)
+    -- Create ultra-safe template options
+    local ultra_safe_opts = create_safe_template_opts(opts_param)
+    debug_template_opts(ultra_safe_opts, template_name)
+    
+    -- Try rendering with ultra-safe options
+    local ok, result = pcall(Path.prompts.render_file, template_name, ultra_safe_opts)
     if not ok then
       Utils.error("Failed to render template '" .. template_name .. "': " .. tostring(result))
-      return ""
+      
+      -- Try with minimal safe options as final fallback
+      local minimal_opts = {
+        ask = true,
+        code_lang = "unknown",
+        selected_files = {},
+        selected_code = nil,
+        recently_viewed_files = {},
+        project_context = "",
+        diagnostics = "",
+        system_info = "",
+        model_name = "unknown",
+        memory = "",
+        enable_fastapply = false,
+        use_react_prompt = false,
+      }
+      
+      local ok2, result2 = pcall(Path.prompts.render_file, template_name, minimal_opts)
+      if ok2 then
+        Utils.warn("Template '" .. template_name .. "' rendered with minimal options due to data issues")
+        return result2 or ""
+      else
+        Utils.error("Template '" .. template_name .. "' failed even with minimal options: " .. tostring(result2))
+        return ""
+      end
     end
     return result or ""
   end
@@ -518,7 +565,15 @@ function M.generate_prompts(opts)
   end
 
   if opts.memory ~= nil and opts.memory ~= "" and opts.memory ~= "null" then
-    local memory = safe_render_file("_memory.avanterules", template_opts)
+    -- Extra sanitization for memory content before template rendering
+    local memory_safe_opts = vim.deepcopy(template_opts)
+    if memory_safe_opts.memory then
+      -- Apply double sanitization for memory content
+      memory_safe_opts.memory = ensure_string(memory_safe_opts.memory)
+      memory_safe_opts.memory = ensure_string(memory_safe_opts.memory) -- Double clean
+    end
+    
+    local memory = safe_render_file("_memory.avanterules", memory_safe_opts)
     if memory ~= "" then
       table.insert(context_messages, { role = "user", content = memory, visible = false, is_context = true })
     end

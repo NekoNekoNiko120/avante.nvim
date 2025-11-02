@@ -540,7 +540,7 @@ M._defaults = {
     support_paste_from_clipboard = false,
     minimize_diff = true,
     enable_token_counting = true,
-    use_cwd_as_project_root = false,
+    use_cwd_as_project_root = true,
     auto_focus_on_diff_view = false,
     ---@type boolean | string[] -- true: auto-approve all tools, false: normal prompts, string[]: auto-approve specific tools by name
     auto_approve_tool_permissions = true, -- Default: auto-approve all tools (no prompts)

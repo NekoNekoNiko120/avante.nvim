@@ -449,12 +449,21 @@ P.repo_map = RepoMap
 ---@return AvanteTemplates|nil
 function P._init_templates_lib()
   if _templates_lib ~= nil then return _templates_lib end
+  
   local ok, module = pcall(require, "avante_templates")
   ---@cast module AvanteTemplates
   ---@cast ok boolean
-  if not ok then return nil end
+  
+  if not ok then
+    -- Show user-friendly build instructions instead of auto-building
+    vim.defer_fn(function()
+      local build_checker = require("avante.build_checker")
+      build_checker.check_and_prompt()
+    end, 100)
+    return nil
+  end
+  
   _templates_lib = module
-
   return _templates_lib
 end
 
