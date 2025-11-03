@@ -897,7 +897,8 @@ end
 ---@param config avante.Config
 ---@param model_name string
 ---@param provider_name? string
-local function apply_model_selection(config, model_name, provider_name)
+---@param user_explicitly_set_provider? boolean
+local function apply_model_selection(config, model_name, provider_name, user_explicitly_set_provider)
   local provider_list = config.providers or {}
   local current_provider_name = config.provider
   if config.acp_providers[current_provider_name] then return end
@@ -910,7 +911,9 @@ local function apply_model_selection(config, model_name, provider_name)
   local current_provider_data = provider_list[current_provider_name]
   local current_model_name = current_provider_data and current_provider_data.model
 
-  if target_provider_name ~= current_provider_name or model_name ~= current_model_name then
+  -- Only apply saved configuration if user hasn't explicitly set a provider
+  -- This allows users to override saved settings without deleting the config file
+  if not user_explicitly_set_provider and (target_provider_name ~= current_provider_name or model_name ~= current_model_name) then
     config.provider = target_provider_name
     target_provider.model = model_name
     if not target_provider.model_names then target_provider.model_names = {} end
@@ -920,6 +923,16 @@ local function apply_model_selection(config, model_name, provider_name)
       end
     end
     Utils.info(string.format("Using previously selected model: %s/%s", target_provider_name, model_name))
+  elseif user_explicitly_set_provider then
+    -- User has explicitly set a provider, so we should respect that choice
+    -- Don't override the user's provider choice, just ensure model_names is populated
+    local user_provider = config.providers[current_provider_name]
+    if user_provider then
+      if not user_provider.model_names then user_provider.model_names = {} end
+      if user_provider.model and not vim.tbl_contains(user_provider.model_names, user_provider.model) then
+        table.insert(user_provider.model_names, user_provider.model)
+      end
+    end
   end
 end
 
@@ -1059,8 +1072,25 @@ function M.setup(opts)
     }
   )
 
-  local last_model, last_provider = M.get_last_used_model(merged.providers or {})
-  if last_model then apply_model_selection(merged, last_model, last_provider) end
+  -- Check if user explicitly set a provider in their config
+  local user_explicitly_set_provider = opts and opts.provider ~= nil
+  
+  -- Only load saved configuration if user hasn't explicitly set a provider
+  if not user_explicitly_set_provider then
+    local last_model, last_provider = M.get_last_used_model(merged.providers or {})
+    if last_model then 
+      apply_model_selection(merged, last_model, last_provider, false) 
+    end
+  else
+    -- User has explicitly set a provider, ensure model_names is populated for their choice
+    local user_provider = merged.providers[merged.provider]
+    if user_provider then
+      if not user_provider.model_names then user_provider.model_names = {} end
+      if user_provider.model and not vim.tbl_contains(user_provider.model_names, user_provider.model) then
+        table.insert(user_provider.model_names, user_provider.model)
+      end
+    end
+  end
 
   M._options = merged
 
