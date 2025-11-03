@@ -1090,6 +1090,8 @@ function M.setup(opts)
         table.insert(user_provider.model_names, user_provider.model)
       end
     end
+    -- Important: Don't apply saved configuration when user explicitly sets provider
+    Utils.info("Using user-specified provider: " .. merged.provider, { title = "Avante" })
   end
 
   M._options = merged
