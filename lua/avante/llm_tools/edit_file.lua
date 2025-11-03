@@ -52,21 +52,23 @@ M.returns = {
   },
 }
 
----@type AvanteLLMToolFunc<{ path: string, instructions: string, code_edit: string }>
-M.func = function(input, opts)
-  if opts.streaming then return false, "streaming not supported" end
-  if not input.path then return false, "path not provided" end
-  if not input.instructions then input.instructions = "" end
-  if not input.code_edit then return false, "code_edit not provided" end
-  local on_complete = opts.on_complete
-  if not on_complete then return false, "on_complete not provided" end
-  
+-- Extract the actual edit logic into a separate function
+local function perform_edit(input, opts, on_complete)
   local provider = Providers["morph"]
-  if not provider then return false, "morph provider not found" end
-  if not provider.is_env_set() then return false, "morph provider not set" end
+  if not provider then 
+    on_complete(false, "morph provider not found")
+    return
+  end
+  if not provider.is_env_set() then 
+    on_complete(false, "morph provider not set")
+    return
+  end
 
   --- if input.path is a directory, return false
-  if vim.fn.isdirectory(input.path) == 1 then return false, "path is a directory" end
+  if vim.fn.isdirectory(input.path) == 1 then 
+    on_complete(false, "path is a directory")
+    return
+  end
 
   -- Pre-compute absolute path and other values outside of callback
   local Helpers = require("avante.llm_tools.helpers")
@@ -135,7 +137,6 @@ M.func = function(input, opts)
     callback = vim.schedule_wrap(function(response)
       
       if response.status >= 400 then
-
         -- 检查curl常见的错误码
         local full_error = "HTTP request failed: "
           .. "Status: " .. response.status
@@ -209,6 +210,49 @@ M.func = function(input, opts)
       on_complete(true, nil)
     end)
   })
+end
+
+---@type AvanteLLMToolFunc<{ path: string, instructions: string, code_edit: string }>
+M.func = function(input, opts)
+  if opts.streaming then return false, "streaming not supported" end
+  if not input.path then return false, "path not provided" end
+  if not input.instructions then input.instructions = "" end
+  if not input.code_edit then return false, "code_edit not provided" end
+  local on_complete = opts.on_complete
+  if not on_complete then return false, "on_complete not provided" end
+  
+  -- Always require user confirmation for file edits, regardless of auto_approve_tool_permissions
+  local Helpers = require("avante.llm_tools.helpers")
+  
+  -- Create confirmation message
+  local confirmation_message = string.format(
+    "Edit file '%s'?\n\nInstructions: %s\n\nThis will modify the file directly.",
+    input.path,
+    input.instructions
+  )
+  
+  -- Force confirmation for edit_file regardless of global auto_approve setting
+  local function proceed_with_edit()
+    perform_edit(input, opts, on_complete)
+  end
+  
+  -- Always show confirmation for file edits by bypassing auto_approve for this specific tool
+  local Config = require("avante.config")
+  local original_auto_approve = Config.behaviour.auto_approve_tool_permissions
+  
+  -- Temporarily disable auto_approve for this confirmation
+  Config.behaviour.auto_approve_tool_permissions = false
+  
+  Helpers.confirm(confirmation_message, function(confirmed)
+    -- Restore original auto_approve setting
+    Config.behaviour.auto_approve_tool_permissions = original_auto_approve
+    
+    if confirmed then
+      proceed_with_edit()
+    else
+      on_complete(false, "File edit cancelled by user")
+    end
+  end, nil, opts.session_ctx, "edit_file")
 end
 
 return M

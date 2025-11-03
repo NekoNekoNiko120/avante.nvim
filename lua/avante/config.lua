@@ -543,7 +543,7 @@ M._defaults = {
     use_cwd_as_project_root = true,
     auto_focus_on_diff_view = false,
     ---@type boolean | string[] -- true: auto-approve all tools, false: normal prompts, string[]: auto-approve specific tools by name
-    auto_approve_tool_permissions = true, -- Default: auto-approve all tools (no prompts)
+    auto_approve_tool_permissions = { "view", "ls", "glob", "bash", "str_replace", "create", "write_to_file", "insert" }, -- Auto-approve safe tools, but require confirmation for edit_file
     auto_check_diagnostics = true,
     enable_fastapply = true,
     include_generated_by_commit_line = false, -- Controls if 'Generated-by: <provider/model>' line is added to git commit message
