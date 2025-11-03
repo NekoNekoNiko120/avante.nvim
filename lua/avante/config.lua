@@ -1069,25 +1069,16 @@ function M.setup(opts)
     merged.behaviour.support_paste_from_clipboard = M.support_paste_image()
   end
 
-  -- Check if user explicitly set a provider in their config
-  local user_explicitly_set_provider = opts and opts.provider ~= nil
-  
-  -- Only load saved configuration if user hasn't explicitly set a provider
-  if not user_explicitly_set_provider then
-    local last_model, last_provider = M.get_last_used_model(merged.providers or {})
-    if last_model then 
-      apply_model_selection(merged, last_model, last_provider, false) 
+  -- Apply saved configuration only if it doesn't conflict with user settings
+  local last_model, last_provider = M.get_last_used_model(merged.providers or {})
+  if last_model and last_provider then
+    -- Only apply saved config if the saved provider exists in user's config
+    if merged.providers[last_provider] then
+      apply_model_selection(merged, last_model, last_provider, false)
+    else
+      -- Saved provider doesn't exist in user config, respect user's choice
+      Utils.info("Saved provider '" .. last_provider .. "' not found in config, using user settings")
     end
-  else
-    -- User has explicitly set a provider, ensure model_names is populated for their choice
-    local user_provider = merged.providers[merged.provider]
-    if user_provider then
-      if not user_provider.model_names then user_provider.model_names = {} end
-      if user_provider.model and not vim.tbl_contains(user_provider.model_names, user_provider.model) then
-        table.insert(user_provider.model_names, user_provider.model)
-      end
-    end
-    -- Important: Don't apply saved configuration when user explicitly sets provider
   end
 
   M._options = merged
