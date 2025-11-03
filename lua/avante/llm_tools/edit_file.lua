@@ -10,6 +10,58 @@ local NAMESPACE = vim.api.nvim_create_namespace("avante-edit-preview")
 -- Store original content for preview reversion
 local preview_state = {}
 
+-- LCS-based diff algorithm for better change detection
+local function compute_lcs(original_lines, new_lines)
+  local m, n = #original_lines, #new_lines
+  local lcs = {}
+  
+  -- Initialize LCS table
+  for i = 0, m do
+    lcs[i] = {}
+    for j = 0, n do
+      lcs[i][j] = 0
+    end
+  end
+  
+  -- Fill LCS table
+  for i = 1, m do
+    for j = 1, n do
+      if original_lines[i] == new_lines[j] then
+        lcs[i][j] = lcs[i-1][j-1] + 1
+      else
+        lcs[i][j] = math.max(lcs[i-1][j], lcs[i][j-1])
+      end
+    end
+  end
+  
+  return lcs
+end
+
+-- Generate diff operations from LCS
+local function generate_diff_ops(original_lines, new_lines, lcs)
+  local ops = {}
+  local i, j = #original_lines, #new_lines
+  
+  while i > 0 or j > 0 do
+    if i > 0 and j > 0 and original_lines[i] == new_lines[j] then
+      -- Lines are equal
+      table.insert(ops, 1, {type = "equal", orig_idx = i, new_idx = j})
+      i = i - 1
+      j = j - 1
+    elseif j > 0 and (i == 0 or lcs[i][j-1] >= lcs[i-1][j]) then
+      -- Line added
+      table.insert(ops, 1, {type = "add", new_idx = j, content = new_lines[j]})
+      j = j - 1
+    else
+      -- Line deleted
+      table.insert(ops, 1, {type = "delete", orig_idx = i, content = original_lines[i]})
+      i = i - 1
+    end
+  end
+  
+  return ops
+end
+
 -- Function to highlight the edit preview with proper diff display
 local function highlight_edit_preview(bufnr, original_lines, new_lines)
   vim.api.nvim_buf_clear_namespace(bufnr, NAMESPACE, 0, -1)
@@ -18,53 +70,49 @@ local function highlight_edit_preview(bufnr, original_lines, new_lines)
   original_lines = original_lines or {}
   new_lines = new_lines or {}
   
-  local orig_len = #original_lines
-  local new_len = #new_lines
-  
-  -- Collect all changes to show deleted lines properly
-  local all_deleted_lines = {}
-  local changes_found = false
-  
-  -- Compare line by line and highlight changes
-  for i = 1, math.max(orig_len, new_len) do
-    local orig_line = original_lines[i]
-    local new_line = new_lines[i]
-    
-    if orig_line and new_line then
-      if orig_line ~= new_line then
-        -- Line was modified - highlight the new line and collect the old one
-        vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
-          hl_group = Highlights.INCOMING,
-          hl_eol = true,
-          end_col = #new_line,
-          priority = PRIORITY,
-          hl_mode = "combine",
-        })
-        table.insert(all_deleted_lines, { { "- " .. orig_line, Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
-        changes_found = true
-      end
-    elseif new_line then
-      -- Line was added - highlight it
+  -- If no original content, highlight everything as new
+  if #original_lines == 0 then
+    for i, line in ipairs(new_lines) do
       vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
         hl_group = Highlights.INCOMING,
         hl_eol = true,
-        end_col = #new_line,
+        end_col = #line,
         priority = PRIORITY,
         hl_mode = "combine",
       })
-      changes_found = true
-    elseif orig_line then
-      -- Line was deleted - collect it
-      table.insert(all_deleted_lines, { { "- " .. orig_line, Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
-      changes_found = true
     end
+    return
   end
   
-  -- Show all deleted lines at the end of the file if there were any changes
-  if changes_found and #all_deleted_lines > 0 then
-    local insert_line = math.max(0, new_len)
+  -- Compute LCS and generate diff operations
+  local lcs = compute_lcs(original_lines, new_lines)
+  local diff_ops = generate_diff_ops(original_lines, new_lines, lcs)
+  
+  local deleted_lines = {}
+  
+  -- Process diff operations
+  for _, op in ipairs(diff_ops) do
+    if op.type == "add" then
+      -- Highlight added lines
+      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, op.new_idx - 1, 0, {
+        hl_group = Highlights.INCOMING,
+        hl_eol = true,
+        end_col = #op.content,
+        priority = PRIORITY,
+        hl_mode = "combine",
+      })
+    elseif op.type == "delete" then
+      -- Collect deleted lines
+      table.insert(deleted_lines, { { "- " .. op.content, Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
+    end
+    -- Equal lines are not highlighted (they remain unchanged)
+  end
+  
+  -- Show deleted lines as virtual text at the end
+  if #deleted_lines > 0 then
+    local insert_line = math.max(0, #new_lines)
     vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, insert_line, 0, {
-      virt_lines = all_deleted_lines,
+      virt_lines = deleted_lines,
       priority = PRIORITY,
       hl_eol = true,
       hl_mode = "combine",
