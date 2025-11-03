@@ -21,20 +21,20 @@ require("avante").setup {
     }
   end,
   
-  -- 禁用内置工具，优先使用MCP工具
-  -- 这些工具将自动重定向到MCP等效工具
+  -- 禁用内置工具，让AI使用MCP工具
+  -- 重要：只有在此列表中的工具才会被重定向到MCP
   disabled_tools = {
+    "edit_file",      -- 重定向到 MCP filesystem/write_file
+    "create_file",    -- 重定向到 MCP filesystem/write_file
+    "write_to_file",  -- 重定向到 MCP filesystem/write_file
+    "read_file",      -- 重定向到 MCP filesystem/read_file
     "list_files",     -- 重定向到 MCP filesystem/list_directory
     "search_files",   -- 重定向到 MCP filesystem/search_files
-    "read_file",      -- 重定向到 MCP filesystem/read_file
-    "create_file",    -- 重定向到 MCP filesystem/write_file
-    "rename_file",    -- 重定向到 MCP filesystem/move_file
     "delete_file",    -- 重定向到 MCP filesystem/delete_file
+    "rename_file",    -- 重定向到 MCP filesystem/move_file
     "create_dir",     -- 重定向到 MCP filesystem/create_directory
     "rename_dir",     -- 重定向到 MCP filesystem/move_file
     "delete_dir",     -- 重定向到 MCP filesystem/delete_file
-    "edit_file",      -- 重定向到 MCP filesystem/write_file
-    "write_to_file",  -- 重定向到 MCP filesystem/write_file
     "bash",           -- 重定向到 MCP shell/run_command (如果可用)
   },
   

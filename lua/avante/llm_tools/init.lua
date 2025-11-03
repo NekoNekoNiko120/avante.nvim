@@ -1351,9 +1351,9 @@ function M.process_tool_use(tools, tool_use, opts)
     return nil, Helpers.CANCEL_TOKEN
   end
 
-  -- Force redirect disabled tools to MCP equivalents
-  local redirector = require("avante.tool_redirector")
-  if redirector.should_redirect(tool_use.name) then
+  -- Redirect disabled tools to MCP equivalents if configured
+  local redirector_ok, redirector = pcall(require, "avante.tool_redirector")
+  if redirector_ok and redirector.should_redirect(tool_use.name) then
     local redirected_tool_use, error = redirector.redirect_tool_use(tool_use)
     if redirected_tool_use then
       if on_log then 
