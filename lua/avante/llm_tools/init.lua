@@ -614,6 +614,12 @@ function M.get_tools(user_input, history_messages)
   local custom_tools = Config.custom_tools
   if type(custom_tools) == "function" then custom_tools = custom_tools() end
   
+  -- Ensure custom_tools is a proper array
+  custom_tools = custom_tools or {}
+  if type(custom_tools) ~= "table" then
+    custom_tools = {}
+  end
+  
   -- Check if mcphub is available and force MCP tool usage
   local compat = require("avante.mcphub_compat")
   local mcphub_available = compat.is_available() and compat.has_active_servers()
@@ -623,7 +629,10 @@ function M.get_tools(user_input, history_messages)
     -- Get MCP tools from mcphub extensions
     local mcp_ext_ok, mcp_ext = pcall(require, "mcphub.extensions.avante")
     if mcp_ext_ok and mcp_ext.mcp_tool then
-      table.insert(mcphub_tools, mcp_ext.mcp_tool())
+      local mcp_tool = mcp_ext.mcp_tool()
+      if mcp_tool then
+        table.insert(mcphub_tools, mcp_tool)
+      end
     end
   end
   
@@ -631,9 +640,13 @@ function M.get_tools(user_input, history_messages)
   local tools_to_use = {}
   if mcphub_available then
     -- Add MCP tools first (highest priority)
-    vim.list_extend(tools_to_use, mcphub_tools)
+    for _, tool in ipairs(mcphub_tools) do
+      table.insert(tools_to_use, tool)
+    end
     -- Add custom tools (but not conflicting ones)
-    vim.list_extend(tools_to_use, custom_tools)
+    for _, tool in ipairs(custom_tools) do
+      table.insert(tools_to_use, tool)
+    end
     -- Add built-in tools (but filter out those that should be replaced by MCP)
     local mcp_replaceable_tools = {
       "str_replace_based_edit_tool", "str_replace_editor", "create", "read_file", 
@@ -647,8 +660,12 @@ function M.get_tools(user_input, history_messages)
     end
   else
     -- Normal behavior when mcphub is not available
-    vim.list_extend(tools_to_use, custom_tools)
-    vim.list_extend(tools_to_use, M._tools)
+    for _, tool in ipairs(custom_tools) do
+      table.insert(tools_to_use, tool)
+    end
+    for _, tool in ipairs(M._tools) do
+      table.insert(tools_to_use, tool)
+    end
   end
   
   -- Remove duplicates, keeping the first occurrence (MCP tools take precedence)

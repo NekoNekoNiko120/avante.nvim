@@ -1092,10 +1092,10 @@ function M.setup(opts)
   
   -- Apply MCP configuration processing
   if merged.mcp and merged.mcp.enabled then
-    local mcp_config_ok, mcp_config = pcall(require, "avante.config.mcp")
-    if mcp_config_ok then
-      mcp_config.setup(merged.mcp)
-      merged = mcp_config.apply_to_avante_config(merged)
+    -- MCP configuration is handled directly in the tools system
+    -- No additional processing needed here for now
+    if merged.mcp.debug then
+      vim.notify("MCP configuration enabled", vim.log.levels.DEBUG)
     end
   end
   

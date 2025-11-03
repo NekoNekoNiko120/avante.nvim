@@ -59,7 +59,10 @@ Example usage:
       -- Add mcphub extension tool if available
       local mcp_ext_ok, mcp_ext = pcall(require, "mcphub.extensions.avante")
       if mcp_ext_ok and mcp_ext.mcp_tool then
-        table.insert(tools, mcp_ext.mcp_tool())
+        local mcp_tool = mcp_ext.mcp_tool()
+        if mcp_tool then
+          table.insert(tools, mcp_tool)
+        end
       end
       
       return tools
@@ -123,7 +126,20 @@ function M.setup(user_config)
       merged_config.custom_tools = function()
         local auto_tools = type(auto_custom_tools) == "function" and auto_custom_tools() or auto_custom_tools or {}
         local user_tools = type(user_custom_tools) == "function" and user_custom_tools() or user_custom_tools or {}
-        return vim.list_extend(vim.deepcopy(user_tools), auto_tools)
+        
+        -- Ensure both are arrays
+        if type(auto_tools) ~= "table" then auto_tools = {} end
+        if type(user_tools) ~= "table" then user_tools = {} end
+        
+        local merged_tools = {}
+        for _, tool in ipairs(user_tools) do
+          table.insert(merged_tools, tool)
+        end
+        for _, tool in ipairs(auto_tools) do
+          table.insert(merged_tools, tool)
+        end
+        
+        return merged_tools
       end
     end
     
