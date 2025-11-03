@@ -10,6 +10,51 @@ local NAMESPACE = vim.api.nvim_create_namespace("avante-edit-preview")
 -- Store original content for preview reversion
 local preview_state = {}
 
+-- Function to highlight the edit preview
+local function highlight_edit_preview(bufnr, original_lines, new_lines)
+  vim.api.nvim_buf_clear_namespace(bufnr, NAMESPACE, 0, -1)
+  
+  -- Simple diff highlighting - highlight all changed lines
+  local min_lines = math.min(#original_lines, #new_lines)
+  local max_lines = math.max(#original_lines, #new_lines)
+  
+  -- Highlight changed lines
+  for i = 1, min_lines do
+    if original_lines[i] ~= new_lines[i] then
+      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
+        hl_group = Highlights.INCOMING,
+        hl_eol = true,
+        end_col = #new_lines[i],
+        priority = PRIORITY,
+      })
+    end
+  end
+  
+  -- Highlight added lines
+  for i = min_lines + 1, #new_lines do
+    vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
+      hl_group = Highlights.INCOMING,
+      hl_eol = true,
+      end_col = #new_lines[i],
+      priority = PRIORITY,
+    })
+  end
+  
+  -- Show deleted lines as virtual text
+  if #original_lines > #new_lines then
+    local deleted_lines = {}
+    for i = #new_lines + 1, #original_lines do
+      table.insert(deleted_lines, { { "- " .. original_lines[i], Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
+    end
+    if #deleted_lines > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, #new_lines, 0, {
+        virt_lines = deleted_lines,
+        priority = PRIORITY,
+      })
+    end
+  end
+end
+
 ---@class AvanteLLMTool
 local M = setmetatable({}, Base)
 
@@ -178,51 +223,6 @@ local function show_edit_preview(input, opts, callback)
       callback(true, nil)
     end)
   })
-end
-
--- Function to highlight the edit preview
-local function highlight_edit_preview(bufnr, original_lines, new_lines)
-  vim.api.nvim_buf_clear_namespace(bufnr, NAMESPACE, 0, -1)
-  
-  -- Simple diff highlighting - highlight all changed lines
-  local min_lines = math.min(#original_lines, #new_lines)
-  local max_lines = math.max(#original_lines, #new_lines)
-  
-  -- Highlight changed lines
-  for i = 1, min_lines do
-    if original_lines[i] ~= new_lines[i] then
-      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
-        hl_group = Highlights.INCOMING,
-        hl_eol = true,
-        end_col = #new_lines[i],
-        priority = PRIORITY,
-      })
-    end
-  end
-  
-  -- Highlight added lines
-  for i = min_lines + 1, #new_lines do
-    vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
-      hl_group = Highlights.INCOMING,
-      hl_eol = true,
-      end_col = #new_lines[i],
-      priority = PRIORITY,
-    })
-  end
-  
-  -- Show deleted lines as virtual text
-  if #original_lines > #new_lines then
-    local deleted_lines = {}
-    for i = #new_lines + 1, #original_lines do
-      table.insert(deleted_lines, { { "- " .. original_lines[i], Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
-    end
-    if #deleted_lines > 0 then
-      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, #new_lines, 0, {
-        virt_lines = deleted_lines,
-        priority = PRIORITY,
-      })
-    end
-  end
 end
 
 -- Function to revert preview changes

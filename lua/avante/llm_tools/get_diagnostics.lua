@@ -7,7 +7,7 @@ local M = setmetatable({}, Base)
 
 M.name = "get_diagnostics"
 
-M.description = "Get diagnostics from a specific file"
+M.description = "Get LSP diagnostics (errors, warnings, hints) from a specific file. This tool helps AI understand compilation errors, linting issues, type errors, and other code problems that need to be fixed."
 
 ---@type AvanteLLMToolParam
 M.param = {
@@ -39,11 +39,11 @@ M.returns = {
   },
 }
 
----@type AvanteLLMToolFunc<{ path: string, diff: string }>
+---@type AvanteLLMToolFunc<{ path: string }>
 function M.func(input, opts)
   local on_log = opts.on_log
   local on_complete = opts.on_complete
-  if not input.path then return false, "pathf are required" end
+  if not input.path then return false, "path is required" end
   if on_log then on_log("path: " .. input.path) end
   local abs_path = Helpers.get_abs_path(input.path)
   if not Helpers.has_permission_to_access(abs_path) then return false, "No permission to access path: " .. abs_path end
