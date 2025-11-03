@@ -1351,6 +1351,20 @@ function M.process_tool_use(tools, tool_use, opts)
     return nil, Helpers.CANCEL_TOKEN
   end
 
+  -- Force redirect disabled tools to MCP equivalents
+  local redirector = require("avante.tool_redirector")
+  if redirector.should_redirect(tool_use.name) then
+    local redirected_tool_use, error = redirector.redirect_tool_use(tool_use)
+    if redirected_tool_use then
+      if on_log then 
+        on_log(tool_use.id, tool_use.name, "Redirecting to MCP: " .. tool_use.name .. " -> " .. redirected_tool_use.name, "running")
+      end
+      return M.process_tool_use(tools, redirected_tool_use, opts)
+    else
+      return nil, error or string.format("Failed to redirect tool '%s' to MCP", tool_use.name)
+    end
+  end
+
   local func
   if tool_use.name == "str_replace_editor" then
     func = M.str_replace_editor
