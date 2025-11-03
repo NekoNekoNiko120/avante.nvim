@@ -193,8 +193,10 @@ function Selection:submit_input(input)
     Utils.debug("full response:", full_response)
   end
 
-  local filetype = api.nvim_get_option_value("filetype", { buf = self.code_bufnr })
-  local file_ext = api.nvim_buf_get_name(self.code_bufnr):match("^.+%.(.+)$")
+  local success, filetype = pcall(api.nvim_get_option_value, "filetype", { buf = self.code_bufnr })
+  if not success then filetype = "" end
+  local success_name, buf_name = pcall(api.nvim_buf_get_name, self.code_bufnr)
+  local file_ext = success_name and buf_name:match("^.+%.(.+)$") or nil
 
   local mentions = Utils.extract_mentions(input)
   input = mentions.new_content

@@ -20,7 +20,7 @@ M.enabled = function()
 end
 
 M.description =
-  "Use this tool to propose an edit to an existing file.\n\nThis will be read by a less intelligent model, which will quickly apply the edit. You should make it clear what the edit is, while also minimizing the unchanged code you write.\nWhen writing the edit, you should specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.\n\nFor example:\n\n// ... existing code ...\nFIRST_EDIT\n// ... existing code ...\nSECOND_EDIT\n// ... existing code ...\nTHIRD_EDIT\n// ... existing code ...\n\nYou should still bias towards repeating as few lines of the original file as possible to convey the change.\nBut, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.\nDO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence. If you omit the existing code comment, the model may inadvertently delete these lines.\nIf you plan on deleting a section, you must provide context before and after to delete it. If the initial code is ```code \\n Block 1 \\n Block 2 \\n Block 3 \\n code```, and you want to remove Block 2, you would output ```// ... existing code ... \\n Block 1 \\n  Block 3 \\n // ... existing code ...```.\nMake sure it is clear what the edit should be, and where it should be applied.\nALWAYS make all edits to a file in a single edit_file instead of multiple edit_file calls to the same file. The apply model can handle many distinct edits at once."
+  "Use this tool to edit an EXISTING file. This tool can only modify files that already exist - use 'create' tool for new files.\n\nIMPORTANT: This tool requires the target file to exist. If you get a 'No such file or directory' error, the file doesn't exist and you should use the 'create' tool instead.\n\nThis will show a preview of changes before applying them. You should make it clear what the edit is, while minimizing unchanged code.\nWhen writing the edit, specify each edit in sequence, with the special comment // ... existing code ... to represent unchanged code in between edited lines.\n\nFor example:\n\n// ... existing code ...\nFIRST_EDIT\n// ... existing code ...\nSECOND_EDIT\n// ... existing code ...\nTHIRD_EDIT\n// ... existing code ...\n\nYou should bias towards repeating as few lines of the original file as possible to convey the change.\nBut, each edit should contain sufficient context of unchanged lines around the code you're editing to resolve ambiguity.\nDO NOT omit spans of pre-existing code (or comments) without using the // ... existing code ... comment to indicate its absence.\nIf you plan on deleting a section, you must provide context before and after to delete it.\nALWAYS make all edits to a file in a single edit_file call instead of multiple calls to the same file."
 
 ---@type AvanteLLMToolParam
 M.param = {
@@ -63,6 +63,23 @@ M.returns = {
 local function show_edit_preview(input, opts, callback)
   local Helpers = require("avante.llm_tools.helpers")
   local abs_path = Helpers.get_abs_path(input.path)
+  
+  -- Check if file exists first
+  local Path = require("plenary.path")
+  if not Path:new(abs_path):exists() then
+    callback(false, string.format(
+      "File '%s' does not exist. Use 'create' tool to create new files, not 'edit_file'.\nFull path: %s",
+      input.path,
+      abs_path
+    ))
+    return
+  end
+  
+  -- Check if it's a directory
+  if vim.fn.isdirectory(abs_path) == 1 then
+    callback(false, string.format("'%s' is a directory, not a file", input.path))
+    return
+  end
   
   -- Get original content
   local lines, read_error = Utils.read_file_from_buf_or_disk(input.path)
@@ -237,8 +254,22 @@ local function perform_edit(input, opts, on_complete)
     return
   end
 
+  -- Double-check file existence (in case preview was skipped)
+  local Helpers = require("avante.llm_tools.helpers")
+  local abs_path = Helpers.get_abs_path(input.path)
+  local Path = require("plenary.path")
+  
+  if not Path:new(abs_path):exists() then
+    on_complete(false, string.format(
+      "File '%s' does not exist. Use 'create' tool to create new files, not 'edit_file'.\nFull path: %s",
+      input.path,
+      abs_path
+    ))
+    return
+  end
+
   --- if input.path is a directory, return false
-  if vim.fn.isdirectory(input.path) == 1 then 
+  if vim.fn.isdirectory(abs_path) == 1 then 
     on_complete(false, "path is a directory")
     return
   end
@@ -400,8 +431,24 @@ M.func = function(input, opts)
   local on_complete = opts.on_complete
   if not on_complete then return false, "on_complete not provided" end
   
-  -- Show diff preview before confirmation
+  -- Early file existence check
   local Helpers = require("avante.llm_tools.helpers")
+  local abs_path = Helpers.get_abs_path(input.path)
+  local Path = require("plenary.path")
+  
+  if not Path:new(abs_path):exists() then
+    return false, string.format(
+      "File '%s' does not exist. Use 'create' tool to create new files, not 'edit_file'.\nFull path: %s",
+      input.path,
+      abs_path
+    )
+  end
+  
+  if vim.fn.isdirectory(abs_path) == 1 then
+    return false, string.format("'%s' is a directory, not a file", input.path)
+  end
+  
+  -- Show diff preview before confirmation
   local Config = require("avante.config")
   
   -- First, show a preview of the changes

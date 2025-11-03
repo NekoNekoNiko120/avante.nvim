@@ -165,7 +165,8 @@ function Suggestion:suggest()
   ctx.prev_doc = doc
 
   local bufnr = api.nvim_get_current_buf()
-  local filetype = api.nvim_get_option_value("filetype", { buf = bufnr })
+  local success, filetype = pcall(api.nvim_get_option_value, "filetype", { buf = bufnr })
+  if not success then filetype = "" end
   local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   table.insert(lines, "")
   table.insert(lines, "")

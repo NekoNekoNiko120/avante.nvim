@@ -215,7 +215,8 @@ function M.refresh(opts)
 
   local focused = sidebar.containers.result.bufnr == curbuf or sidebar.containers.input.bufnr == curbuf
   if focused or not sidebar:is_open() then return end
-  local listed = vim.api.nvim_get_option_value("buflisted", { buf = curbuf })
+  local success, listed = pcall(vim.api.nvim_get_option_value, "buflisted", { buf = curbuf })
+  if not success then listed = false end
 
   if Utils.is_sidebar_buffer(curbuf) or not listed then return end
 

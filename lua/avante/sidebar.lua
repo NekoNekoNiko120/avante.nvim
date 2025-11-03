@@ -1481,8 +1481,10 @@ function Sidebar:on_mount(opts)
           if lang and lang ~= "" then vim.treesitter.start(selected_code_buf, lang) end
         end
         -- Try the old syntax highlighting
-        local syntax = api.nvim_get_option_value("syntax", { buf = self.code.bufnr })
-        if syntax and syntax ~= "" then api.nvim_set_option_value("syntax", syntax, { buf = selected_code_buf }) end
+        local success, syntax = pcall(api.nvim_get_option_value, "syntax", { buf = self.code.bufnr })
+        if success and syntax and syntax ~= "" then 
+          api.nvim_set_option_value("syntax", syntax, { buf = selected_code_buf }) 
+        end
       end
     end
   end
@@ -1673,7 +1675,14 @@ function Sidebar:initialize()
   if not self.code.bufnr or not api.nvim_buf_is_valid(self.code.bufnr) then return self end
 
   -- check if the filetype of self.code.bufnr is disabled
-  local buf_ft = api.nvim_get_option_value("filetype", { buf = self.code.bufnr })
+  local buf_ft = ""
+  local success, result = pcall(api.nvim_get_option_value, "filetype", { buf = self.code.bufnr })
+  if success then
+    buf_ft = result
+  else
+    -- If we can't get filetype, skip the check
+    buf_ft = ""
+  end
   if vim.list_contains(Config.selector.exclude_auto_select, buf_ft) then return self end
 
   self.file_selector:reset()
@@ -2562,12 +2571,32 @@ end
 ---@param request string
 ---@param cb? fun(opts: AvanteGeneratePromptsOptions): nil
 function Sidebar:get_generate_prompts_options(request, cb)
-  local filetype = api.nvim_get_option_value("filetype", { buf = self.code.bufnr })
+  -- Check if buffer is valid before accessing it
+  local filetype = ""
   local file_ext = nil
-
-  -- Get file extension safely
-  local buf_name = api.nvim_buf_get_name(self.code.bufnr)
-  if buf_name and buf_name ~= "" then file_ext = vim.fn.fnamemodify(buf_name, ":e") end
+  local buf_name = ""
+  
+  if self.code.bufnr and api.nvim_buf_is_valid(self.code.bufnr) then
+    local success, ft = pcall(api.nvim_get_option_value, "filetype", { buf = self.code.bufnr })
+    if success then filetype = ft end
+    local success_name, name = pcall(api.nvim_buf_get_name, self.code.bufnr)
+    if success_name then buf_name = name end
+    if buf_name and buf_name ~= "" then 
+      file_ext = vim.fn.fnamemodify(buf_name, ":e") 
+    end
+  else
+    -- Fallback: try to get current buffer if code buffer is invalid
+    local current_buf = api.nvim_get_current_buf()
+    if api.nvim_buf_is_valid(current_buf) then
+      local success, ft = pcall(api.nvim_get_option_value, "filetype", { buf = current_buf })
+      if success then filetype = ft end
+      local success_name, name = pcall(api.nvim_buf_get_name, current_buf)
+      if success_name then buf_name = name end
+      if buf_name and buf_name ~= "" then 
+        file_ext = vim.fn.fnamemodify(buf_name, ":e") 
+      end
+    end
+  end
 
   ---@type AvanteSelectedCode | nil
   local selected_code = nil
@@ -3229,8 +3258,10 @@ function Sidebar:render(opts)
         vim.schedule(function()
           if not self.code.winid or not api.nvim_win_is_valid(self.code.winid) then return end
           local bufnr = api.nvim_win_get_buf(self.code.winid)
-          self.code.bufnr = bufnr
-          self:reload_chat_history()
+          if bufnr and api.nvim_buf_is_valid(bufnr) then
+            self.code.bufnr = bufnr
+            self:reload_chat_history()
+          end
         end)
       end,
     })
