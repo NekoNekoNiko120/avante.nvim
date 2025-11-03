@@ -5,11 +5,8 @@ local M = {}
 
 -- Check if mcphub is available
 local function is_mcphub_available()
-  local ok, mcphub = pcall(require, "mcphub")
-  if not ok then return false end
-  
-  local hub = mcphub.get_hub_instance()
-  return hub and #hub:get_active_servers() > 0
+  local compat = require("avante.mcphub_compat")
+  return compat.is_available() and compat.has_active_servers()
 end
 
 -- Get automatic MCP configuration
@@ -23,9 +20,8 @@ function M.get_auto_mcp_config()
     -- System prompt that includes MCP tool usage instructions
     system_prompt = function()
       local mcphub = require("mcphub")
-      local hub = mcphub.get_hub_instance()
-      if hub then
-        local base_prompt = hub:get_active_servers_prompt() or ""
+      local compat = require("avante.mcphub_compat")
+      local base_prompt = compat.get_servers_prompt()
         local mcp_instructions = [[
 
 IMPORTANT: You have access to MCP (Model Context Protocol) tools through the 'use_mcp_tool' function. 
@@ -148,11 +144,10 @@ function M.status()
   }
   
   if mcphub_available then
-    local mcphub = require("mcphub")
-    local hub = mcphub.get_hub_instance()
-    local servers = hub:get_active_servers()
-    status.active_servers = vim.tbl_map(function(server) return server.name end, servers)
-    status.server_count = #servers
+    local compat = require("avante.mcphub_compat")
+    local servers = compat.get_active_servers()
+    status.active_servers = vim.tbl_map(function(server) return server.name or server.id or "unknown" end, servers)
+    status.server_count = compat.get_server_count()
   end
   
   return status

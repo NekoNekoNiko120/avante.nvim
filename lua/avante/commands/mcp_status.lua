@@ -6,24 +6,34 @@ local M = {}
 -- Check MCP integration status
 function M.check_status()
   local status_lines = {}
+  local compat = require("avante.mcphub_compat")
   
   -- Check mcphub availability
-  local mcphub_ok, mcphub = pcall(require, "mcphub")
-  if not mcphub_ok then
+  if not compat.is_available() then
     table.insert(status_lines, "❌ mcphub.nvim: Not installed")
     table.insert(status_lines, "   Install mcphub.nvim to enable MCP integration")
     vim.notify(table.concat(status_lines, "\n"), vim.log.levels.WARN, { title = "Avante MCP Status" })
     return
   end
   
-  local hub = mcphub.get_hub_instance()
-  if not hub then
-    table.insert(status_lines, "⚠️  mcphub.nvim: Installed but not initialized")
+  local servers = compat.get_active_servers()
+  local server_count = compat.get_server_count()
+  
+  if server_count == 0 then
+    table.insert(status_lines, "⚠️  mcphub.nvim: No active MCP servers")
+    table.insert(status_lines, "   Configure MCP servers in mcphub to enable integration")
+    
+    -- Show debug info if available
+    local debug_info = compat.get_debug_info()
+    if debug_info.hub_available then
+      table.insert(status_lines, "   Hub is available but no servers configured")
+    else
+      table.insert(status_lines, "   Hub not initialized - check mcphub setup")
+    end
     vim.notify(table.concat(status_lines, "\n"), vim.log.levels.WARN, { title = "Avante MCP Status" })
     return
   end
   
-  local servers = hub:get_active_servers()
   if #servers == 0 then
     table.insert(status_lines, "⚠️  mcphub.nvim: No active MCP servers")
     table.insert(status_lines, "   Configure MCP servers in mcphub to enable integration")
@@ -31,12 +41,17 @@ function M.check_status()
     return
   end
   
+    vim.notify(table.concat(status_lines, "\n"), vim.log.levels.WARN, { title = "Avante MCP Status" })
+    return
+  end
+  
   -- MCP is available and active
-  table.insert(status_lines, "✅ mcphub.nvim: Active with " .. #servers .. " server(s)")
+  table.insert(status_lines, "✅ mcphub.nvim: Active with " .. server_count .. " server(s)")
   
   -- List active servers
   for _, server in ipairs(servers) do
-    table.insert(status_lines, "   📡 " .. server.name)
+    local server_name = server.name or server.id or tostring(server)
+    table.insert(status_lines, "   📡 " .. server_name)
   end
   
   -- Check tool redirection status
@@ -133,14 +148,14 @@ end
 
 -- Test MCP tool functionality
 function M.test_mcp_tools()
-  local mcphub_ok, mcphub = pcall(require, "mcphub")
-  if not mcphub_ok then
+  local compat = require("avante.mcphub_compat")
+  
+  if not compat.is_available() then
     vim.notify("❌ mcphub.nvim not available", vim.log.levels.ERROR, { title = "MCP Test" })
     return
   end
   
-  local hub = mcphub.get_hub_instance()
-  if not hub or #hub:get_active_servers() == 0 then
+  if not compat.has_active_servers() then
     vim.notify("❌ No active MCP servers", vim.log.levels.ERROR, { title = "MCP Test" })
     return
   end
@@ -149,7 +164,7 @@ function M.test_mcp_tools()
   vim.notify("🧪 Testing MCP tool functionality...", vim.log.levels.INFO, { title = "MCP Test" })
   
   -- Try to call a simple MCP tool (list_directory on current directory)
-  mcphub.call_tool("filesystem", "list_directory", { path = "." }, function(result, error)
+  compat.call_tool("filesystem", "list_directory", { path = "." }, function(result, error)
     if error then
       vim.notify("❌ MCP test failed: " .. error, vim.log.levels.ERROR, { title = "MCP Test" })
     else

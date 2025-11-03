@@ -615,18 +615,15 @@ function M.get_tools(user_input, history_messages)
   if type(custom_tools) == "function" then custom_tools = custom_tools() end
   
   -- Check if mcphub is available and force MCP tool usage
-  local mcphub_available = false
+  local compat = require("avante.mcphub_compat")
+  local mcphub_available = compat.is_available() and compat.has_active_servers()
   local mcphub_tools = {}
-  local ok, mcphub = pcall(require, "mcphub")
-  if ok and mcphub then
-    local hub = mcphub.get_hub_instance()
-    if hub and #hub:get_active_servers() > 0 then
-      mcphub_available = true
-      -- Get MCP tools from mcphub extensions
-      local mcp_ext_ok, mcp_ext = pcall(require, "mcphub.extensions.avante")
-      if mcp_ext_ok and mcp_ext.mcp_tool then
-        table.insert(mcphub_tools, mcp_ext.mcp_tool())
-      end
+  
+  if mcphub_available then
+    -- Get MCP tools from mcphub extensions
+    local mcp_ext_ok, mcp_ext = pcall(require, "mcphub.extensions.avante")
+    if mcp_ext_ok and mcp_ext.mcp_tool then
+      table.insert(mcphub_tools, mcp_ext.mcp_tool())
     end
   end
   

@@ -5,8 +5,8 @@ local M = {}
 
 -- Check if mcphub is available
 local function is_mcphub_available()
-  local ok, mcphub = pcall(require, "mcphub")
-  return ok and mcphub
+  local compat = require("avante.mcphub_compat")
+  return compat.is_available()
 end
 
 -- Get available MCP tools that can replace built-in tools
@@ -79,8 +79,8 @@ local function get_mcp_file_tools()
       end
       
       -- Use mcphub to call the MCP tool
-      local mcphub = require("mcphub")
-      mcphub.call_tool(input.server_name, "write_file", {
+      local compat = require("avante.mcphub_compat")
+      compat.call_tool(input.server_name, "write_file", {
         path = input.path,
         content = input.content,
       }, function(result, error)
@@ -149,8 +149,8 @@ local function get_mcp_file_tools()
       end
       
       -- Use mcphub to call the MCP tool
-      local mcphub = require("mcphub")
-      mcphub.call_tool(input.server_name, "read_file", {
+      local compat = require("avante.mcphub_compat")
+      compat.call_tool(input.server_name, "read_file", {
         path = input.path,
       }, function(result, error)
         if error then
@@ -225,8 +225,8 @@ local function get_mcp_file_tools()
       end
       
       -- Use mcphub to call the MCP tool
-      local mcphub = require("mcphub")
-      mcphub.call_tool(input.server_name, input.tool_name, input.tool_input or {}, function(result, error)
+      local compat = require("avante.mcphub_compat")
+      compat.call_tool(input.server_name, input.tool_name, input.tool_input or {}, function(result, error)
         if error then
           on_complete(nil, "MCP tool call failed: " .. error)
         else
@@ -297,9 +297,8 @@ function M.force_enable_mcp_tools()
     return false, "mcphub.nvim is not available"
   end
   
-  local mcphub = require("mcphub")
-  local hub = mcphub.get_hub_instance()
-  if not hub or #hub:get_active_servers() == 0 then
+  local compat = require("avante.mcphub_compat")
+  if not compat.has_active_servers() then
     return false, "No active MCP servers found"
   end
   
@@ -310,11 +309,14 @@ end
 
 -- Check MCP integration status
 function M.status()
-  local mcphub_available = is_mcphub_available()
+  local compat = require("avante.mcphub_compat")
+  local mcphub_available = compat.is_available()
   local tools = get_mcp_file_tools()
   
   return {
     mcphub_available = mcphub_available,
+    has_active_servers = compat.has_active_servers(),
+    server_count = compat.get_server_count(),
     mcp_tools_count = #tools,
     tools = vim.tbl_map(function(tool) return tool.name end, tools),
   }

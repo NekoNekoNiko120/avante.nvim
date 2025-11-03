@@ -114,8 +114,8 @@ local TOOL_REDIRECTIONS = {
 
 -- Check if mcphub is available
 local function is_mcphub_available()
-  local ok, _ = pcall(require, "mcphub")
-  return ok
+  local compat = require("avante.mcphub_compat")
+  return compat.is_available()
 end
 
 -- Get the default MCP server for a tool type
@@ -127,20 +127,18 @@ local function get_default_server(tool_name)
   
   -- Check if the specified server is available
   if is_mcphub_available() then
-    local mcphub = require("mcphub")
-    local hub = mcphub.get_hub_instance()
-    if hub then
-      local servers = hub:get_active_servers()
-      for _, server in ipairs(servers) do
-        if server.name == redirection.mcp_server then
-          return redirection.mcp_server
-        end
+    local compat = require("avante.mcphub_compat")
+    local servers = compat.get_active_servers()
+    
+    for _, server in ipairs(servers) do
+      if server.name == redirection.mcp_server then
+        return redirection.mcp_server
       end
-      
-      -- Fallback to first available server that might support the tool
-      if #servers > 0 then
-        return servers[1].name
-      end
+    end
+    
+    -- Fallback to first available server that might support the tool
+    if #servers > 0 then
+      return servers[1].name
     end
   end
   
@@ -183,9 +181,8 @@ function M.should_redirect(tool_name)
   
   -- If mcphub is available, force redirect all redirectable tools regardless of disabled_tools config
   if is_mcphub_available() then
-    local mcphub = require("mcphub")
-    local hub = mcphub.get_hub_instance()
-    if hub and #hub:get_active_servers() > 0 then
+    local compat = require("avante.mcphub_compat")
+    if compat.has_active_servers() then
       return TOOL_REDIRECTIONS[tool_name] ~= nil
     end
   end
