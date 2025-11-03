@@ -97,6 +97,46 @@ Parameters:
 
     system_prompt = system_prompt .. tools_prompts
 
+    -- Add MCP tool usage guide if MCP tools are available
+    local has_mcp_tool = false
+    for _, tool in ipairs(opts.tools) do
+      if tool.name == "use_mcp_tool" then
+        has_mcp_tool = true
+        break
+      end
+    end
+    
+    if has_mcp_tool then
+      system_prompt = system_prompt .. [[
+
+# MCP Tool Usage Guide
+
+When using use_mcp_tool, you MUST provide the correct tool_input parameters for each tool type:
+
+## File Operations (filesystem server):
+- **write_file**: Create or overwrite a file
+  - Required: {"path": "file/path.ext", "content": "file content"}
+- **read_file**: Read file contents  
+  - Required: {"path": "file/path.ext"}
+- **list_directory**: List directory contents
+  - Required: {"path": "directory/path"}
+- **create_directory**: Create a directory
+  - Required: {"path": "directory/path"}
+- **delete_file**: Delete a file
+  - Required: {"path": "file/path.ext"}
+- **move_file**: Move or rename a file
+  - Required: {"source": "old/path.ext", "destination": "new/path.ext"}
+
+## Shell Operations (shell server, if available):
+- **run_command**: Execute shell commands
+  - Required: {"command": "shell command"}
+  - Optional: {"working_directory": "/path/to/dir"}
+
+CRITICAL: Always include ALL required parameters in tool_input. Missing parameters will cause validation errors.
+
+]]
+    end
+
     system_prompt = system_prompt
       .. [[
 # Tool Use Examples
@@ -104,6 +144,12 @@ Parameters:
 ## Example 1: Requesting to execute a command
 
 <tool_use>{"name": "bash", "input": {"path": "./src", "command": "npm run dev"}}</tool_use>
+
+## Example 2: Using MCP tools (if available)
+
+<tool_use>{"name": "use_mcp_tool", "input": {"server_name": "filesystem", "tool_name": "write_file", "tool_input": {"path": "hello.py", "content": "print('Hello World')"}}}</tool_use>
+
+<tool_use>{"name": "use_mcp_tool", "input": {"server_name": "filesystem", "tool_name": "read_file", "tool_input": {"path": "config.json"}}}</tool_use>
 ]]
 
     if Config.behaviour.enable_fastapply then

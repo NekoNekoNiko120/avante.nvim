@@ -8,7 +8,7 @@ require("avante").setup {
     auto_apply_diff_after_generation = false,
   },
   
-  -- 系统提示作为函数确保LLM始终有最新的MCP服务器状态
+  -- 系统提示会自动包含MCP工具使用指南（无需手动配置）
   system_prompt = function()
     local hub = require("mcphub").get_hub_instance()
     return hub and hub:get_active_servers_prompt() or ""
