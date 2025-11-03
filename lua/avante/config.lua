@@ -551,7 +551,7 @@ M._defaults = {
     --- popup is the original yes,all,no in a floating window
     --- inline_buttons is the new inline buttons in the sidebar
     ---@type "popup" | "inline_buttons"
-    confirmation_ui_style = "inline_buttons",
+    confirmation_ui_style = "popup",
     --- Whether to automatically open files and navigate to lines when ACP agent makes edits
     ---@type boolean
     acp_follow_agent_locations = true,
@@ -616,6 +616,16 @@ M._defaults = {
     cancel = {
       normal = { "<C-c>", "<Esc>", "q" },
       insert = { "<C-c>" },
+    },
+    confirm = {
+      allow = "y",
+      allow_always = "a", 
+      reject = "n",
+      close = { "<Esc>", "q" },
+      focus_window = "<C-w>f",
+      code = "c",
+      resp = "r", 
+      input = "i",
     },
     -- NOTE: The following will be safely set by avante.nvim
     ask = "<leader>aa",

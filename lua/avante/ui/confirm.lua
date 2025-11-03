@@ -73,7 +73,7 @@ function M:open()
   local buttons_line = Line:new({
     { "  [Y]es ", function() return focus_index == 1 and BUTTON_FOCUS or BUTTON_NORMAL end },
     { "   " },
-    { "  [A]ll yes ", function() return focus_index == 2 and BUTTON_FOCUS or BUTTON_NORMAL end },
+    { "  [A]lways ", function() return focus_index == 2 and BUTTON_FOCUS or BUTTON_NORMAL end },
     { "    " },
     { "  [N]o ", function() return focus_index == 3 and BUTTON_FOCUS or BUTTON_NORMAL end },
   })
@@ -119,8 +119,8 @@ function M:open()
       winid = container_winid,
     },
     position = {
-      row = vim.o.lines - win_height,
-      col = math.floor((container_width - win_width) / 2),
+      row = "50%",
+      col = "50%",
     },
     size = { width = win_width, height = win_height },
     enter = self._focus ~= false,
@@ -293,6 +293,14 @@ function M:open()
   end, { buffer = popup.bufnr })
 
   vim.keymap.set("n", "<CR>", function() click_button() end, { buffer = popup.bufnr })
+
+  -- Add close/cancel keymaps
+  for _, key in ipairs(Config.mappings.confirm.close) do
+    vim.keymap.set("n", key, function()
+      self:close()
+      callback("no", "Cancelled by user")
+    end, { buffer = popup.bufnr, nowait = true })
+  end
 
   vim.api.nvim_buf_set_keymap(popup.bufnr, "n", "<LeftMouse>", "", {
     callback = function()
