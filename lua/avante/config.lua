@@ -1060,17 +1060,14 @@ function M.setup(opts)
     end
   end
 
-  local merged = vim.tbl_deep_extend(
-    "force",
-    M._defaults,
-    opts,
-    ---@type avante.Config
-    {
-      behaviour = {
-        support_paste_from_clipboard = M.support_paste_image(),
-      },
-    }
-  )
+  -- First merge defaults with user opts
+  local merged = vim.tbl_deep_extend("force", M._defaults, opts)
+  
+  -- Then apply runtime behavior settings without overriding user config
+  if not merged.behaviour then merged.behaviour = {} end
+  if merged.behaviour.support_paste_from_clipboard == nil then
+    merged.behaviour.support_paste_from_clipboard = M.support_paste_image()
+  end
 
   -- Check if user explicitly set a provider in their config
   local user_explicitly_set_provider = opts and opts.provider ~= nil
@@ -1091,7 +1088,6 @@ function M.setup(opts)
       end
     end
     -- Important: Don't apply saved configuration when user explicitly sets provider
-    Utils.info("Using user-specified provider: " .. merged.provider, { title = "Avante" })
   end
 
   M._options = merged
