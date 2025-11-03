@@ -503,6 +503,12 @@ function M.setup(opts)
   require("avante.providers").setup()
   require("avante.clipboard").setup()
 
+  -- setup MCP status commands
+  local mcp_status_ok, mcp_status = pcall(require, "avante.commands.mcp_status")
+  if mcp_status_ok then
+    mcp_status.setup_commands()
+  end
+
   -- setup helpers
   H.autocmds()
   H.keymaps()

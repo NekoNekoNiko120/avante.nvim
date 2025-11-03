@@ -180,6 +180,17 @@ end
 -- Check if a tool should be redirected
 function M.should_redirect(tool_name)
   local Config = require("avante.config")
+  
+  -- If mcphub is available, force redirect all redirectable tools regardless of disabled_tools config
+  if is_mcphub_available() then
+    local mcphub = require("mcphub")
+    local hub = mcphub.get_hub_instance()
+    if hub and #hub:get_active_servers() > 0 then
+      return TOOL_REDIRECTIONS[tool_name] ~= nil
+    end
+  end
+  
+  -- Fallback to original behavior
   return vim.tbl_contains(Config.disabled_tools, tool_name) and TOOL_REDIRECTIONS[tool_name] ~= nil
 end
 

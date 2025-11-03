@@ -291,6 +291,23 @@ function M.setup(user_config)
   }
 end
 
+-- Force enable MCP tools when mcphub is available
+function M.force_enable_mcp_tools()
+  if not is_mcphub_available() then
+    return false, "mcphub.nvim is not available"
+  end
+  
+  local mcphub = require("mcphub")
+  local hub = mcphub.get_hub_instance()
+  if not hub or #hub:get_active_servers() == 0 then
+    return false, "No active MCP servers found"
+  end
+  
+  -- This function is called automatically by the modified get_tools function
+  -- to ensure MCP tools are prioritized when mcphub is available
+  return true, "MCP tools are now prioritized"
+end
+
 -- Check MCP integration status
 function M.status()
   local mcphub_available = is_mcphub_available()

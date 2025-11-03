@@ -614,14 +614,50 @@ function M.get_tools(user_input, history_messages)
   local custom_tools = Config.custom_tools
   if type(custom_tools) == "function" then custom_tools = custom_tools() end
   
-  -- Put custom tools first to give them higher priority over built-in tools
-  ---@type AvanteLLMTool[]
-  local unfiltered_tools = vim.list_extend(vim.list_extend({}, custom_tools), M._tools)
+  -- Check if mcphub is available and force MCP tool usage
+  local mcphub_available = false
+  local mcphub_tools = {}
+  local ok, mcphub = pcall(require, "mcphub")
+  if ok and mcphub then
+    local hub = mcphub.get_hub_instance()
+    if hub and #hub:get_active_servers() > 0 then
+      mcphub_available = true
+      -- Get MCP tools from mcphub extensions
+      local mcp_ext_ok, mcp_ext = pcall(require, "mcphub.extensions.avante")
+      if mcp_ext_ok and mcp_ext.mcp_tool then
+        table.insert(mcphub_tools, mcp_ext.mcp_tool())
+      end
+    end
+  end
   
-  -- Remove duplicates, keeping the first occurrence (custom tools take precedence)
+  -- When mcphub is available, prioritize MCP tools and auto-disable conflicting built-in tools
+  local tools_to_use = {}
+  if mcphub_available then
+    -- Add MCP tools first (highest priority)
+    vim.list_extend(tools_to_use, mcphub_tools)
+    -- Add custom tools (but not conflicting ones)
+    vim.list_extend(tools_to_use, custom_tools)
+    -- Add built-in tools (but filter out those that should be replaced by MCP)
+    local mcp_replaceable_tools = {
+      "str_replace_based_edit_tool", "str_replace_editor", "create", "read_file", 
+      "write_to_file", "edit_file", "create_file", "list_files", "search_files",
+      "delete_file", "rename_file", "create_dir", "bash"
+    }
+    for _, tool in ipairs(M._tools) do
+      if not vim.tbl_contains(mcp_replaceable_tools, tool.name) then
+        table.insert(tools_to_use, tool)
+      end
+    end
+  else
+    -- Normal behavior when mcphub is not available
+    vim.list_extend(tools_to_use, custom_tools)
+    vim.list_extend(tools_to_use, M._tools)
+  end
+  
+  -- Remove duplicates, keeping the first occurrence (MCP tools take precedence)
   local seen_names = {}
   local deduplicated_tools = {}
-  for _, tool in ipairs(unfiltered_tools) do
+  for _, tool in ipairs(tools_to_use) do
     if not seen_names[tool.name] then
       seen_names[tool.name] = true
       table.insert(deduplicated_tools, tool)
@@ -633,6 +669,19 @@ function M.get_tools(user_input, history_messages)
     :filter(function(tool) ---@param tool AvanteLLMTool
       -- Always disable tools that are explicitly disabled
       if vim.tbl_contains(Config.disabled_tools, tool.name) then return false end
+      
+      -- When mcphub is available, force disable built-in tools that have MCP equivalents
+      if mcphub_available then
+        local mcp_replaceable_tools = {
+          "str_replace_based_edit_tool", "str_replace_editor", "create", "read_file", 
+          "write_to_file", "edit_file", "create_file", "list_files", "search_files",
+          "delete_file", "rename_file", "create_dir", "bash"
+        }
+        if vim.tbl_contains(mcp_replaceable_tools, tool.name) then
+          return false -- Force disable built-in tools when MCP is available
+        end
+      end
+      
       if tool.enabled == nil then
         return true
       else

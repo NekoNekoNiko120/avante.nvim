@@ -803,6 +803,33 @@ M._defaults = {
   shortcuts = {},
   ---@type AskOptions
   ask_opts = {},
+  -- MCP 强制模式配置
+  mcp = {
+    enabled = true,                    -- 启用 MCP 强制模式
+    auto_detect = true,                -- 自动检测 mcphub 可用性
+    force_mcp_tools = true,            -- 强制使用 MCP 工具
+    auto_disable_builtin = true,       -- 自动禁用冲突的内置工具
+    auto_approve_project_files = true, -- 自动批准项目文件操作
+    enhance_system_prompt = true,      -- 增强系统提示
+    debug = false,                     -- 调试模式
+    log_redirections = true,           -- 记录重定向日志
+    replaceable_tools = {              -- 可替代的内置工具
+      "str_replace_based_edit_tool",
+      "str_replace_editor", 
+      "create",
+      "read_file",
+      "write_to_file", 
+      "edit_file",
+      "create_file",
+      "list_files",
+      "search_files",
+      "delete_file",
+      "rename_file", 
+      "create_dir",
+      "bash"
+    },
+    system_prompt_template = nil,      -- 自定义系统提示模板
+  },
 }
 
 ---@type avante.Config
@@ -1062,6 +1089,15 @@ function M.setup(opts)
 
   -- First merge defaults with user opts
   local merged = vim.tbl_deep_extend("force", M._defaults, opts)
+  
+  -- Apply MCP configuration processing
+  if merged.mcp and merged.mcp.enabled then
+    local mcp_config_ok, mcp_config = pcall(require, "avante.config.mcp")
+    if mcp_config_ok then
+      mcp_config.setup(merged.mcp)
+      merged = mcp_config.apply_to_avante_config(merged)
+    end
+  end
   
   -- Then apply runtime behavior settings without overriding user config
   if not merged.behaviour then merged.behaviour = {} end
