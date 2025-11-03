@@ -2,6 +2,13 @@ local Base = require("avante.llm_tools.base")
 local Providers = require("avante.providers")
 local Utils = require("avante.utils")
 local curl = require("plenary.curl")
+local Highlights = require("avante.highlights")
+
+local PRIORITY = (vim.hl or vim.highlight).priorities.user
+local NAMESPACE = vim.api.nvim_create_namespace("avante-edit-preview")
+
+-- Store original content for preview reversion
+local preview_state = {}
 
 ---@class AvanteLLMTool
 local M = setmetatable({}, Base)
@@ -51,6 +58,172 @@ M.returns = {
     optional = true,
   },
 }
+
+-- Function to show edit preview using Morph API
+local function show_edit_preview(input, opts, callback)
+  local Helpers = require("avante.llm_tools.helpers")
+  local abs_path = Helpers.get_abs_path(input.path)
+  
+  -- Get original content
+  local lines, read_error = Utils.read_file_from_buf_or_disk(input.path)
+  if read_error then
+    callback(false, "Failed to read file: " .. input.path .. " - " .. read_error)
+    return
+  end
+  
+  if lines and #lines > 0 then
+    if lines[#lines] == "" then lines = vim.list_slice(lines, 0, #lines - 1) end
+  end
+  local original_code = table.concat(lines or {}, "\n")
+  
+  -- Store original content for reversion
+  preview_state[input.path] = {
+    original_lines = lines or {},
+    bufnr = nil
+  }
+  
+  -- Get buffer
+  local bufnr, err = Helpers.get_bufnr(abs_path)
+  if err then
+    callback(false, err)
+    return
+  end
+  preview_state[input.path].bufnr = bufnr
+  
+  -- Call Morph API to get preview
+  local provider = Providers["morph"]
+  if not provider or not provider.is_env_set() then
+    callback(false, "Morph provider not available for preview")
+    return
+  end
+  
+  local provider_conf = Providers.parse_config(provider)
+  local body = {
+    model = provider_conf.model,
+    messages = {
+      {
+        role = "user",
+        content = "<instructions>"
+          .. input.instructions
+          .. "</instructions>\n<code>"
+          .. original_code
+          .. "</code>\n<update>"
+          .. input.code_edit
+          .. "</update>",
+      },
+    },
+  }
+  
+  local headers = {
+    ["Content-Type"] = "application/json",
+  }
+  
+  if Providers.env.require_api_key(provider_conf) then
+    local api_key = provider.parse_api_key()
+    if not api_key or api_key == "" then
+      callback(false, "API key not found or empty")
+      return
+    end
+    headers["Authorization"] = "Bearer " .. api_key
+  end
+  
+  local url = Utils.url_join(provider_conf.endpoint, "/chat/completions")
+  
+  curl.post(url, {
+    headers = headers,
+    body = vim.json.encode(body),
+    timeout = 120000,
+    callback = vim.schedule_wrap(function(response)
+      if response.status >= 400 then
+        callback(false, "Preview generation failed: " .. (response.body or "Unknown error"))
+        return
+      end
+      
+      local ok_, jsn = pcall(vim.json.decode, response.body or "")
+      if not ok_ or not jsn.choices or not jsn.choices[1] or not jsn.choices[1].message then
+        callback(false, "Invalid preview response")
+        return
+      end
+      
+      local merged_code = jsn.choices[1].message.content
+      if not merged_code or merged_code == "" then
+        callback(false, "Empty preview content")
+        return
+      end
+      
+      -- Apply preview to buffer with diff highlighting
+      local new_lines = vim.split(merged_code, "\n")
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
+      
+      -- Add diff highlighting
+      highlight_edit_preview(bufnr, lines or {}, new_lines)
+      
+      callback(true, nil)
+    end)
+  })
+end
+
+-- Function to highlight the edit preview
+local function highlight_edit_preview(bufnr, original_lines, new_lines)
+  vim.api.nvim_buf_clear_namespace(bufnr, NAMESPACE, 0, -1)
+  
+  -- Simple diff highlighting - highlight all changed lines
+  local min_lines = math.min(#original_lines, #new_lines)
+  local max_lines = math.max(#original_lines, #new_lines)
+  
+  -- Highlight changed lines
+  for i = 1, min_lines do
+    if original_lines[i] ~= new_lines[i] then
+      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
+        hl_group = Highlights.INCOMING,
+        hl_eol = true,
+        end_col = #new_lines[i],
+        priority = PRIORITY,
+      })
+    end
+  end
+  
+  -- Highlight added lines
+  for i = min_lines + 1, #new_lines do
+    vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
+      hl_group = Highlights.INCOMING,
+      hl_eol = true,
+      end_col = #new_lines[i],
+      priority = PRIORITY,
+    })
+  end
+  
+  -- Show deleted lines as virtual text
+  if #original_lines > #new_lines then
+    local deleted_lines = {}
+    for i = #new_lines + 1, #original_lines do
+      table.insert(deleted_lines, { { "- " .. original_lines[i], Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
+    end
+    if #deleted_lines > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, #new_lines, 0, {
+        virt_lines = deleted_lines,
+        priority = PRIORITY,
+      })
+    end
+  end
+end
+
+-- Function to revert preview changes
+local function revert_preview(file_path)
+  local state = preview_state[file_path]
+  if not state or not state.bufnr or not vim.api.nvim_buf_is_valid(state.bufnr) then
+    return
+  end
+  
+  -- Restore original content
+  vim.api.nvim_buf_set_lines(state.bufnr, 0, -1, false, state.original_lines)
+  
+  -- Clear highlighting
+  vim.api.nvim_buf_clear_namespace(state.bufnr, NAMESPACE, 0, -1)
+  
+  -- Clean up state
+  preview_state[file_path] = nil
+end
 
 -- Extract the actual edit logic into a separate function
 local function perform_edit(input, opts, on_complete)
@@ -207,6 +380,12 @@ local function perform_edit(input, opts, on_complete)
         return
       end
       
+      -- Clean up preview state on successful completion
+      if preview_state[input.path] then
+        vim.api.nvim_buf_clear_namespace(preview_state[input.path].bufnr, NAMESPACE, 0, -1)
+        preview_state[input.path] = nil
+      end
+      
       on_complete(true, nil)
     end)
   })
@@ -221,38 +400,42 @@ M.func = function(input, opts)
   local on_complete = opts.on_complete
   if not on_complete then return false, "on_complete not provided" end
   
-  -- Always require user confirmation for file edits, regardless of auto_approve_tool_permissions
+  -- Show diff preview before confirmation
   local Helpers = require("avante.llm_tools.helpers")
-  
-  -- Create confirmation message
-  local confirmation_message = string.format(
-    "Edit file '%s'?\n\nInstructions: %s\n\nThis will modify the file directly.",
-    input.path,
-    input.instructions
-  )
-  
-  -- Force confirmation for edit_file regardless of global auto_approve setting
-  local function proceed_with_edit()
-    perform_edit(input, opts, on_complete)
-  end
-  
-  -- Always show confirmation for file edits by bypassing auto_approve for this specific tool
   local Config = require("avante.config")
-  local original_auto_approve = Config.behaviour.auto_approve_tool_permissions
   
-  -- Temporarily disable auto_approve for this confirmation
-  Config.behaviour.auto_approve_tool_permissions = false
-  
-  Helpers.confirm(confirmation_message, function(confirmed)
-    -- Restore original auto_approve setting
-    Config.behaviour.auto_approve_tool_permissions = original_auto_approve
-    
-    if confirmed then
-      proceed_with_edit()
-    else
-      on_complete(false, "File edit cancelled by user")
+  -- First, show a preview of the changes
+  show_edit_preview(input, opts, function(preview_success, preview_error)
+    if not preview_success then
+      on_complete(false, preview_error or "Failed to generate preview")
+      return
     end
-  end, nil, opts.session_ctx, "edit_file")
+    
+    -- Create confirmation message with preview info
+    local confirmation_message = string.format(
+      "Apply edit to '%s'?\n\nInstructions: %s\n\nPreview is shown in the editor. Use diff navigation keys to review changes.",
+      input.path,
+      input.instructions
+    )
+    
+    -- Force confirmation for edit_file regardless of global auto_approve setting
+    local original_auto_approve = Config.behaviour.auto_approve_tool_permissions
+    Config.behaviour.auto_approve_tool_permissions = false
+    
+    Helpers.confirm(confirmation_message, function(confirmed)
+      -- Restore original auto_approve setting
+      Config.behaviour.auto_approve_tool_permissions = original_auto_approve
+      
+      if confirmed then
+        -- Apply the actual edit
+        perform_edit(input, opts, on_complete)
+      else
+        -- Revert preview changes
+        revert_preview(input.path)
+        on_complete(false, "File edit cancelled by user")
+      end
+    end, nil, opts.session_ctx, "edit_file")
+  end)
 end
 
 return M
