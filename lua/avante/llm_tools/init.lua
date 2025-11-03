@@ -613,10 +613,23 @@ end
 function M.get_tools(user_input, history_messages)
   local custom_tools = Config.custom_tools
   if type(custom_tools) == "function" then custom_tools = custom_tools() end
+  
+  -- Put custom tools first to give them higher priority over built-in tools
   ---@type AvanteLLMTool[]
-  local unfiltered_tools = vim.list_extend(vim.list_extend({}, M._tools), custom_tools)
+  local unfiltered_tools = vim.list_extend(vim.list_extend({}, custom_tools), M._tools)
+  
+  -- Remove duplicates, keeping the first occurrence (custom tools take precedence)
+  local seen_names = {}
+  local deduplicated_tools = {}
+  for _, tool in ipairs(unfiltered_tools) do
+    if not seen_names[tool.name] then
+      seen_names[tool.name] = true
+      table.insert(deduplicated_tools, tool)
+    end
+  end
+  
   return vim
-    .iter(unfiltered_tools)
+    .iter(deduplicated_tools)
     :filter(function(tool) ---@param tool AvanteLLMTool
       -- Always disable tools that are explicitly disabled
       if vim.tbl_contains(Config.disabled_tools, tool.name) then return false end
@@ -632,11 +645,19 @@ end
 function M.get_tool_names()
   local custom_tools = Config.custom_tools
   if type(custom_tools) == "function" then custom_tools = custom_tools() end
+  
+  -- Put custom tools first to give them higher priority
   ---@type AvanteLLMTool[]
-  local unfiltered_tools = vim.list_extend(vim.list_extend({}, M._tools), custom_tools)
+  local unfiltered_tools = vim.list_extend(vim.list_extend({}, custom_tools), M._tools)
+  
+  -- Remove duplicates, keeping the first occurrence
+  local seen_names = {}
   local tool_names = {}
   for _, tool in ipairs(unfiltered_tools) do
-    table.insert(tool_names, tool.name)
+    if not seen_names[tool.name] then
+      seen_names[tool.name] = true
+      table.insert(tool_names, tool.name)
+    end
   end
   return tool_names
 end
