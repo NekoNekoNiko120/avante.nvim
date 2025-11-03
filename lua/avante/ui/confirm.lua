@@ -295,11 +295,14 @@ function M:open()
   vim.keymap.set("n", "<CR>", function() click_button() end, { buffer = popup.bufnr })
 
   -- Add close/cancel keymaps
-  for _, key in ipairs(Config.mappings.confirm.close) do
-    vim.keymap.set("n", key, function()
-      self:close()
-      callback("no", "Cancelled by user")
-    end, { buffer = popup.bufnr, nowait = true })
+  local close_keys = Config.mappings.confirm.close or { "<Esc>", "q" }
+  if type(close_keys) == "table" then
+    for _, key in ipairs(close_keys) do
+      vim.keymap.set("n", key, function()
+        self:close()
+        callback("no", "Cancelled by user")
+      end, { buffer = popup.bufnr, nowait = true })
+    end
   end
 
   vim.api.nvim_buf_set_keymap(popup.bufnr, "n", "<LeftMouse>", "", {
