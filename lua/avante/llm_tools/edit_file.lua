@@ -10,48 +10,65 @@ local NAMESPACE = vim.api.nvim_create_namespace("avante-edit-preview")
 -- Store original content for preview reversion
 local preview_state = {}
 
--- Function to highlight the edit preview
+-- Function to highlight the edit preview with proper diff display
 local function highlight_edit_preview(bufnr, original_lines, new_lines)
   vim.api.nvim_buf_clear_namespace(bufnr, NAMESPACE, 0, -1)
   
-  -- Simple diff highlighting - highlight all changed lines
-  local min_lines = math.min(#original_lines, #new_lines)
-  local max_lines = math.max(#original_lines, #new_lines)
+  -- Ensure we have valid line arrays
+  original_lines = original_lines or {}
+  new_lines = new_lines or {}
   
-  -- Highlight changed lines
-  for i = 1, min_lines do
-    if original_lines[i] ~= new_lines[i] then
+  local orig_len = #original_lines
+  local new_len = #new_lines
+  
+  -- Collect all changes to show deleted lines properly
+  local all_deleted_lines = {}
+  local changes_found = false
+  
+  -- Compare line by line and highlight changes
+  for i = 1, math.max(orig_len, new_len) do
+    local orig_line = original_lines[i]
+    local new_line = new_lines[i]
+    
+    if orig_line and new_line then
+      if orig_line ~= new_line then
+        -- Line was modified - highlight the new line and collect the old one
+        vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
+          hl_group = Highlights.INCOMING,
+          hl_eol = true,
+          end_col = #new_line,
+          priority = PRIORITY,
+          hl_mode = "combine",
+        })
+        table.insert(all_deleted_lines, { { "- " .. orig_line, Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
+        changes_found = true
+      end
+    elseif new_line then
+      -- Line was added - highlight it
       vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
         hl_group = Highlights.INCOMING,
         hl_eol = true,
-        end_col = #new_lines[i],
+        end_col = #new_line,
         priority = PRIORITY,
+        hl_mode = "combine",
       })
+      changes_found = true
+    elseif orig_line then
+      -- Line was deleted - collect it
+      table.insert(all_deleted_lines, { { "- " .. orig_line, Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
+      changes_found = true
     end
   end
   
-  -- Highlight added lines
-  for i = min_lines + 1, #new_lines do
-    vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, i - 1, 0, {
-      hl_group = Highlights.INCOMING,
-      hl_eol = true,
-      end_col = #new_lines[i],
+  -- Show all deleted lines at the end of the file if there were any changes
+  if changes_found and #all_deleted_lines > 0 then
+    local insert_line = math.max(0, new_len)
+    vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, insert_line, 0, {
+      virt_lines = all_deleted_lines,
       priority = PRIORITY,
+      hl_eol = true,
+      hl_mode = "combine",
     })
-  end
-  
-  -- Show deleted lines as virtual text
-  if #original_lines > #new_lines then
-    local deleted_lines = {}
-    for i = #new_lines + 1, #original_lines do
-      table.insert(deleted_lines, { { "- " .. original_lines[i], Highlights.TO_BE_DELETED_WITHOUT_STRIKETHROUGH } })
-    end
-    if #deleted_lines > 0 then
-      vim.api.nvim_buf_set_extmark(bufnr, NAMESPACE, #new_lines, 0, {
-        virt_lines = deleted_lines,
-        priority = PRIORITY,
-      })
-    end
   end
 end
 
