@@ -2627,7 +2627,7 @@ function Sidebar:get_generate_prompts_options(request, cb)
   local tools = vim.deepcopy(LLMTools.get_tools(request, history_messages))
   table.insert(tools, {
     name = "add_file_to_context",
-    description = "Add a file to the context",
+    description = "Add an EXISTING file to the conversation context for reference. This tool ONLY works with files that already exist in the project. It CANNOT create new files. If you need to create a new file, use the 'create' or 'edit_file' tool instead. Use this tool when you need to read or reference an existing file's content.",
     ---@type AvanteLLMToolFunc<{ rel_path: string }>
     func = function(input)
       self.file_selector:add_selected_file(input.rel_path)
@@ -2635,14 +2635,14 @@ function Sidebar:get_generate_prompts_options(request, cb)
     end,
     param = {
       type = "table",
-      fields = { { name = "rel_path", description = "Relative path to the file", type = "string" } },
+      fields = { { name = "rel_path", description = "Relative path to the EXISTING file to add to context", type = "string" } },
     },
     returns = {},
   })
 
   table.insert(tools, {
     name = "remove_file_from_context",
-    description = "Remove a file from the context",
+    description = "Remove a file from the conversation context. This removes the file from the list of files being referenced in the conversation. It does NOT delete the file from the filesystem.",
     ---@type AvanteLLMToolFunc<{ rel_path: string }>
     func = function(input)
       self.file_selector:remove_selected_file(input.rel_path)
@@ -2650,7 +2650,7 @@ function Sidebar:get_generate_prompts_options(request, cb)
     end,
     param = {
       type = "table",
-      fields = { { name = "rel_path", description = "Relative path to the file", type = "string" } },
+      fields = { { name = "rel_path", description = "Relative path to the file to remove from context", type = "string" } },
     },
     returns = {},
   })
