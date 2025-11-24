@@ -11,7 +11,9 @@ M.name = "create"
 M.description = "The create tool allows you to create a new file with specified content."
 
 function M.enabled()
-  return require("avante.config").mode == "agentic" and not require("avante.config").behaviour.enable_fastapply
+  -- Always enable create tool in agentic mode, regardless of enable_fastapply setting
+  -- This ensures users can create new files even when fastapply is enabled
+  return require("avante.config").mode == "agentic"
 end
 
 ---@type AvanteLLMToolParam
